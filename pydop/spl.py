@@ -48,7 +48,7 @@ class SPL(object):
 
       for delta_f, guard, nb_args in self.m_reg:
         if(self.m_check(guard, product)):
-          print(f"BEGIN {delta_f.__name__}")
+          # print(f"BEGIN {delta_f.__name__}")
           if(nb_args == 0):
             tmp_variant = delta_f()
           elif(nb_args == 1):
@@ -57,7 +57,7 @@ class SPL(object):
             tmp_variant = delta_f(variant, product)
           if(tmp_variant is not None):
             variant = tmp_variant
-          print(f"END {delta_f.__name__}")
+          # print(f"END {delta_f.__name__}")
 
       return variant
     else:

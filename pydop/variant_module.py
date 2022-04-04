@@ -87,7 +87,7 @@ class VariantModulesInstance(object):
         name = args[0]
         bases = tuple((el.m_obj if(isinstance(el, VariantModulesInstance.wrapper)) else el) for el in args[1])
         content = args[2]
-        print(bases)
+        # print(bases)
         return type(name, bases, content)
     def __init__(self, instance, root, obj):
       object.__setattr__(self, "m_instance", instance)
@@ -101,7 +101,7 @@ class VariantModulesInstance(object):
         return object.__getattribute__(self.m_obj, name)
 
     def __setattr__(self, name, value):
-      print(f"__setattr__({name}, {value})")
+      # print(f"__setattr__({name}, {value})")
       object.__setattr__(self, "m_obj", self.m_instance._get_replica__(self.m_obj))
       # print("TOTO2 :", type(self.m_obj))
       self.m_instance._register_obj__(value)
@@ -120,7 +120,7 @@ class VariantModulesInstance(object):
   def _get_replica__(self, obj):
     obj_id = id(obj)
     obj_replica = self.m_ids.get(obj_id)
-    print(f"_get_replica__({obj}) => {obj_replica is None}")
+    # print(f"_get_replica__({obj}) => {obj_replica is None}")
     if(obj_replica is None):
       if(inspect.isclass(obj)):
         obj_replica = type(obj.__name__, obj.__bases__, dict(obj.__dict__))
@@ -134,7 +134,7 @@ class VariantModulesInstance(object):
     return obj_replica
 
   def _register_obj__(self, obj):
-    print(f"_register_obj__({obj})")
+    # print(f"_register_obj__({obj})")
     if(isinstance(obj, VariantModulesInstance.wrapper)):
       print(obj.m_obj)
     if(inspect.isclass(obj)):
