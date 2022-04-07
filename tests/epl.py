@@ -39,75 +39,85 @@ if(__name__ == "__main__"):
 
   @epl.delta(True)
   def setup_exp(variant):
+    @variant.EPL.add
     class Exp(object):
       name = "Exp"
-    variant.EPL.Exp = Exp
 
   @epl.delta("Print", after=["setup_exp"])
   def setup_exp_print(variant):
+    @variant.EPL.Exp.add
     def toString(self): return variant.EPL.Exp.name
-    setattr(variant.EPL.Exp, "toString", toString)
 
   @epl.delta("Eval", after=["setup_exp"])
   def setup_exp_eval(variant):
+    @variant.EPL.Exp.add
     def toInt(self): return None
-    setattr(variant.EPL.Exp, "toInt", toInt)
 
   # literals
 
   @epl.delta("Lit", after=["setup_exp"])
   def setup_lit(variant):
+    @variant.EPL.add
     class Lit(variant.EPL.Exp):
       __slots__ = ("val",)
       def __init__(self, x=None):
         self.val = x
-    variant.EPL.Lit = Lit
 
-  @epl.delta("Print", after=["setup_lit"])
+  @epl.delta(And("Lit", "Print"), after=["setup_lit"])
   def setup_lit_print(variant):
+    @variant.EPL.Lit.add
     def toString(self): return f"{self.val}"
-    setattr(variant.EPL.Lit, "toString", toString)
 
-  @epl.delta("Eval", after=["setup_lit"])
+  @epl.delta(And("Lit", "Eval"), after=["setup_lit"])
   def setup_lit_eval(variant):
+    @variant.EPL.Lit.add
     def toInt(self): return self.val
-    setattr(variant.EPL.Lit, "toInt", toInt)
+
+  @epl.delta(And("Lit", "Print", "Eval"), after=["setup_lit_print", "setup_lit_eval"])
+  def setup_lit_eval_print(variant):
+    @variant.EPL.Lit.modify
+    def toInt(self):
+      res = original()
+      print(self.toString())
+      return res
 
   # Add
 
   @epl.delta("Add", after=["setup_exp"])
   def setup_add(variant):
+    @variant.EPL.add
     class Add(variant.EPL.Exp):
       __slots__ = ("a", "b",)
       def __init__(self, a, b):
         self.a = a
         self.b = b
-    variant.EPL.Add = Add
 
   @epl.delta(And("Add", "Print"), after=["setup_add"])
   def setup_add_print(variant):
+    @variant.EPL.Add.add
     def toString(self): return f"({self.a.toString()} + {self.b.toString()})"
-    setattr(variant.EPL.Add, "toString", toString)
 
   @epl.delta(And("Add", "Eval"), after=["setup_add"])
   def setup_add_eval(variant):
+    @variant.EPL.Add.add
     def toInt(self): return self.a.toInt() + self.b.toInt()
-    setattr(variant.EPL.Add, "toInt", toInt)
 
 
 
   # Computation of variant
 
-  conf_1 = {"epl": True, "Lit": True, "Print": False, "Eval": True, "Add": True}
+  conf_1 = {"epl": True, "Lit": True, "Print": True, "Eval": True, "Add": True}
   variant = epl.apply(conf_1)
 
   # insertion in the module list
-  variant.import_modules()
+  variant.register_modules()
 
   # getting the module EPL
-  EPL = sys.modules['EPL']
+  # EPL = sys.modules['EPL']
+  import EPL
 
   l1 = EPL.Lit(1)
   l2 = EPL.Lit(2)
   l3 = EPL.Add(l1, l2)
-  print(l3.toInt())
+  print(l3.toString())
+  print(l1.toInt())
