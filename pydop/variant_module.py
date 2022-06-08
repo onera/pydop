@@ -306,3 +306,7 @@ class VariantModulesInstance(object):
       # module_id = id(module)
       # module = self.m_ids.get(module_id, module)
       sys.modules[name] = module
+
+  def unregister_modules(self):
+    for name in self.m_names:
+      sys.modules.pop(name)

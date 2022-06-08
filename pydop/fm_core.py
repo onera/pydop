@@ -21,11 +21,13 @@
 # email: michael.lienhardt@onera.fr
 
 
-class fm_class(object):
-  def eval(product):
-    raise NotImplementedError("fm_class is an abstract class: subclassses must implement the \"eval\" method")
-
 def eval(el, product):
-  if(isinstance(el, fm_class)): return el.eval(product)
-  elif(isinstance(el, str)): return product[el]
-  else: return el
+  res = None
+  if(callable(el)):
+    res = el(product)
+  else:
+    res = product.get(el, el)
+  if(isinstance(res, bool)):
+    return res
+  else:
+    raise ValueError(f"ERROR: predicate evaluation must return a boolean (found {type(res)} while evaluating {el})")

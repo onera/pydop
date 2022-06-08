@@ -29,7 +29,7 @@ import sys
 
 if(__name__ == "__main__"):
   epl_fm = FD("epl",
-    FDAnd("Lit"),
+    FDAnd(FD("Lit", default_lit_value=Int())),
     FDAny("Print", "Eval"),
     FDAny("Add")
   )
@@ -56,11 +56,12 @@ if(__name__ == "__main__"):
   # literals
 
   @epl.delta("Lit", after=["setup_exp"])
-  def setup_lit(variant):
+  def setup_lit(variant, product):
+    default_lit_value = product["default_lit_value"]
     @variant.EPL.add
     class Lit(variant.EPL.Exp):
       __slots__ = ("val",)
-      def __init__(self, x=None):
+      def __init__(self, x=default_lit_value):
         self.val = x
 
   @epl.delta(And("Lit", "Print"), after=["setup_lit"])
@@ -106,7 +107,7 @@ if(__name__ == "__main__"):
 
   # Computation of variant
 
-  conf_1 = {"epl": True, "Lit": True, "Print": True, "Eval": True, "Add": True}
+  conf_1 = {"epl": True, "Lit": True, "default_lit_value": 3, "Print": True, "Eval": True, "Add": True}
   variant = epl.apply(conf_1)
 
   # insertion in the module list
@@ -121,3 +122,5 @@ if(__name__ == "__main__"):
   l3 = EPL.Add(l1, l2)
   print(l3.toString())
   print(l1.toInt())
+  print(EPL.Lit().toString())
+
