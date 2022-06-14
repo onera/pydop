@@ -93,7 +93,9 @@ if(__name__ == "__main__"):
   variant.unregister_modules()
 
   # German
-  conf_2 = { "HelloWorld": True, "hello": True, "hello_v": Hello.german, "times": True, "times_v": 3 };
+  # conf_2 = { "HelloWorld": True, "hello": True, "hello_v": Hello.german, "times": True, "times_v": 3 };
+  conf_2 = hello_world_fm.combine_product(conf_1, { "hello_v": Hello.german, "times_v": 3 })
+  assert(conf_2 == { "HelloWorld": True, "hello": True, "hello_v": Hello.german, "times": True, "times_v": 3 })
   variant = spl.apply(conf_2)
   variant.register_modules()
   from hw import HW
@@ -101,7 +103,9 @@ if(__name__ == "__main__"):
   variant.unregister_modules()
 
   # no repeat
-  conf_3 = { "HelloWorld": True, "hello": True, "hello_v": Hello.spanish, "times": False };
+  # conf_3 = { "HelloWorld": True, "hello": True, "hello_v": Hello.spanish, "times": False };
+  conf_3 = hello_world_fm.combine_product(conf_2, { "hello_v": Hello.spanish, "times": False })
+  assert(conf_3 == { "HelloWorld": True, "hello": True, "hello_v": Hello.spanish, "times": False })
   variant = spl.apply(conf_3)
   variant.register_modules()
   from hw import HW

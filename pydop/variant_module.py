@@ -26,6 +26,7 @@
 
 import sys
 import importlib
+import importlib.util
 import inspect
 import copy
 import ast
