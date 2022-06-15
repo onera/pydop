@@ -240,6 +240,10 @@ class _fdgroup__c(object):
         raise ValueError(f"ERROR: the feature {self.get_name(element)} is activated while the parent feature {name_parent} is not")
 
   @staticmethod
+  def content_to_nf(args):
+    return tuple((arg if(isinstance(arg, FD)) else FD(arg)) for arg in args)
+
+  @staticmethod
   def get(element, product):
     if(isinstance(element, FD)): return element._eval__(product)
     elif(isinstance(element, str)): return product[element]
@@ -266,7 +270,7 @@ class _fdgroup__c(object):
 
 class FDAnd(_fdgroup__c):
   def __init__(self, *args):
-    self.m_content = tuple(args)
+    self.m_content = _fdgroup__c.content_to_nf(args)
   @staticmethod
   def _start__(): return True
   @staticmethod
@@ -275,7 +279,7 @@ class FDAnd(_fdgroup__c):
   def _conclude__(value): return value
 class FDAny(_fdgroup__c):
   def __init__(self, *args):
-    self.m_content = tuple(args)
+    self.m_content = _fdgroup__c.content_to_nf(args)
   @staticmethod
   def _start__(): return True
   @staticmethod
@@ -284,7 +288,7 @@ class FDAny(_fdgroup__c):
   def _conclude__(value): return value
 class FDOr(_fdgroup__c):
   def __init__(self, *args):
-    self.m_content = tuple(args)
+    self.m_content = _fdgroup__c.content_to_nf(args)
   @staticmethod
   def _start__(): return False
   @staticmethod
@@ -293,7 +297,7 @@ class FDOr(_fdgroup__c):
   def _conclude__(value): return value
 class FDXor(_fdgroup__c):
   def __init__(self, *args):
-    self.m_content = tuple(args)
+    self.m_content = _fdgroup__c.content_to_nf(args)
   @staticmethod
   def _start__(): return 0
   @staticmethod

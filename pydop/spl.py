@@ -40,7 +40,7 @@ class SPL(object):
     self.m_reg = dreg
     self.m_core = core
 
-  def apply(self, product, core=None):
+  def __call__(self, product, core=None):
     if(self.m_check(self.m_fm, product)):
       variant = core
       if((variant is None) and (self.m_core is not None)):

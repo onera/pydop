@@ -108,7 +108,7 @@ if(__name__ == "__main__"):
   # Computation of variant
 
   conf_1 = {"epl": True, "Lit": True, "default_lit_value": 3, "Print": True, "Eval": True, "Add": True}
-  variant = epl.apply(conf_1)
+  variant = epl(conf_1)
 
   # insertion in the module list
   variant.register_modules()

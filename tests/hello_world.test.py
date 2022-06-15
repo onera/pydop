@@ -84,7 +84,7 @@ if(__name__ == "__main__"):
 
   # English
   conf_1 = { "HelloWorld": True, "hello": True, "hello_v": Hello.english, "times": True, "times_v": 2 };
-  variant = spl.apply(conf_1)
+  variant = spl(conf_1)
   variant.register_modules()
   from hw import HW
   HW().print("John")
@@ -96,7 +96,7 @@ if(__name__ == "__main__"):
   # conf_2 = { "HelloWorld": True, "hello": True, "hello_v": Hello.german, "times": True, "times_v": 3 };
   conf_2 = hello_world_fm.combine_product(conf_1, { "hello_v": Hello.german, "times_v": 3 })
   assert(conf_2 == { "HelloWorld": True, "hello": True, "hello_v": Hello.german, "times": True, "times_v": 3 })
-  variant = spl.apply(conf_2)
+  variant = spl(conf_2)
   variant.register_modules()
   from hw import HW
   HW().print("Mia")
@@ -106,7 +106,7 @@ if(__name__ == "__main__"):
   # conf_3 = { "HelloWorld": True, "hello": True, "hello_v": Hello.spanish, "times": False };
   conf_3 = hello_world_fm.combine_product(conf_2, { "hello_v": Hello.spanish, "times": False })
   assert(conf_3 == { "HelloWorld": True, "hello": True, "hello_v": Hello.spanish, "times": False })
-  variant = spl.apply(conf_3)
+  variant = spl(conf_3)
   variant.register_modules()
   from hw import HW
   HW().print("Luciana")
@@ -121,28 +121,28 @@ if(__name__ == "__main__"):
   # 1. missing decl
   conf_err = {}
   try:
-    variant = spl.apply(conf_err)
+    variant = spl(conf_err)
     print("ERROR in missing feature")
   except KeyError: pass
 
   # 2. wrong group
   conf_err = { "HelloWorld": True, "hello": False, "times": True, "times_v": 4 };
   try:
-    variant = spl.apply(conf_err)
+    variant = spl(conf_err)
     print("ERROR in wrong group")
   except ValueError: pass
 
   # 3. bad attribute 1/2
   conf_err = { "HelloWorld": True, "hello": True, "hello_v": 1, "times": True, "times_v": 4 };
   try:
-    variant = spl.apply(conf_err)
+    variant = spl(conf_err)
     print("ERROR in bad attribute 1/2")
   except ValueError: pass
 
   # 4. bad attribute 2/2
   conf_err = { "HelloWorld": True, "hello": True, "hello_v": Hello.french, "times": False, "times_v": 4 };
   try:
-    variant = spl.apply(conf_err)
+    variant = spl(conf_err)
     print("ERROR in bad attribute 2/2")
   except ValueError: pass
 
