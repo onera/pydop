@@ -23,7 +23,7 @@
 
 from pydop.spl import SPL, RegistryGraph
 from pydop.fm_diagram import *
-from pydop.variant_module import VariantModules
+from pydop.operations.modules import VariantModules
 
 import sys
 
@@ -43,6 +43,10 @@ if(__name__ == "__main__"):
     class Exp(object):
       name = "Exp"
 
+    @variant.EPL.add
+    class A(object): pass
+
+
   @epl.delta("Print", after=["setup_exp"])
   def setup_exp_print(variant):
     @variant.EPL.Exp.add
@@ -59,7 +63,7 @@ if(__name__ == "__main__"):
   def setup_lit(variant, product):
     default_lit_value = product["default_lit_value"]
     @variant.EPL.add
-    class Lit(variant.EPL.Exp):
+    class Lit(variant.EPL.Exp, variant.EPL.A):
       __slots__ = ("val",)
       def __init__(self, x=default_lit_value):
         self.val = x

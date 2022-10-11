@@ -131,7 +131,11 @@ class VariantModulesInstance(object):
   class _wrapper__(object):
     __slots__ = ("m_instance", "m_root", "m_name", "m_obj",)
     def __new__(cls, *args):
+      if(len(args) > 0):
+        print(f"{len(args)}: {isinstance(args[0], VariantModulesInstance)} vs {(not inspect.isclass(args[0]))}")
+
       if((len(args) == 4) and (isinstance(args[0], VariantModulesInstance))):
+      # if((len(args) == 4) and (not inspect.isclass(args[0]))):
         return super(VariantModulesInstance._wrapper__, cls).__new__(cls)
       else:
         name = args[0]

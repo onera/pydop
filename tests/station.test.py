@@ -24,7 +24,7 @@
 from pydop.spl import SPL, RegistryGraph
 from pydop.mspl import MSPL
 from pydop.fm_diagram import *
-from pydop.variant_module import VariantModules
+from pydop.operations.modules import VariantModules
 
 import importlib
 
