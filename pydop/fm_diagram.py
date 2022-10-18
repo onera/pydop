@@ -1,34 +1,94 @@
 
 # This file is part of the pydop library.
 # Copyright (c) 2021 ONERA.
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as
 # published by the Free Software Foundation, version 3.
-# 
+#
 # This program is distributed in the hope that it will be useful, but
 # WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
 # Lesser General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU Lesser General Public
 # License along with this program. If not, see
 # <http://www.gnu.org/licenses/>.
-# 
+#
 
 # Author: Michael Lienhardt
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
-from pydop.fm_core import eval_predicate
+from pydop.fm_core import pred_eval, _empty__
 
 
 import enum
 
 
+
+
+
 ################################################################################
 # Predicate evaluation and error reporting
 ################################################################################
+
+## change the API to have the reasons in the paramter of the function, not in the output
+
+class _unbound__c(object):
+  __slots__ = ("m_name", "m_path",)
+  def __init__(self, name, path=None):
+    self.m_name = name
+    self.m_path = path
+  def __str__(self):
+    if(self.m_path is None):
+      return f"ERROR: variable \"{self.m_name}\" not declared"
+    else:
+      return f"ERROR: variable \"{self.m_name}\" not declared in path \"{_path_to_str__(self.m_path)}\""
+
+class _ambiguous__c(object):
+  __slots__ = ("m_name", "m_path", "m_paths",)
+  def __init__(self, name, path, paths):
+    self.m_name  = name
+    self.m_path  = path
+    self.m_paths = paths
+  def __str__(self):
+    tmp = ", ".join(f"\"{_path_to_str__(p)}\"" for p in self.m_paths)
+    if(self.m_path is None):
+      return f"ERROR: reference \"{self.m_name}\" is ambiguous (corresponds to paths: {tmp})"
+    else:
+      return f"ERROR: reference \"{self.m_path}/{self.m_name}\" is ambiguous (corresponds to paths: {tmp})"
+
+
+class _decl_errors__c(object):
+  __slots__ = ("m_unbounds", "m_ambiguities",)
+  def __init__(self):
+    self.m_unbounds = []
+    self.m_ambiguities = []
+
+  def add(self, el):
+    if(isinstance(el, _unbound__c)):
+      self.m_unbounds.append(el)
+    elif(isinstance(el, _ambiguous__c)):
+      self.m_ambiguities.append(el)
+    else:
+      raise Exception(f"ERROR: unexpected error type {el.__class__.__name__}")
+
+  @property
+  def unbounds(self): return self.m_unbounds
+  @property
+  def ambiguities(self): return self.m_ambiguities
+
+  def has_unbounds(self): return bool(self.m_unbounds)
+  def has_ambiguities(self): return bool(self.m_ambiguities)
+
+  def __bool__(self):
+    return bool(self.m_unbounds) or bool(self.m_ambiguities)
+  def __str__(self):
+    return "\n".join(str(el) for l in (self.m_unbounds, self.m_ambiguities) for el in l)
+
+
+###############################
 
 class _reason_tree__c(object):
   __slots__ = (
@@ -58,21 +118,84 @@ class _reason_tree__c(object):
 
 class _eval_result__c(object):
   __slots__ = ("m_value", "m_reason", "m_snodes")
-  def __init__(self, value=None, reason=None, snodes=None):
-    self.m_value  = value   # the result of the evaluation, used for propagation within a FD
+  def __init__(self, value=None, reason=None):
+    self.m_value  = value   # the result of the evaluation
     self.m_reason = reason  # reason for which a False value cannot be fixed
-    self.m_snodes = snodes  # the list of sub nodes that are True
 
   def value(self): return self.m_value
-  def __bool__(self): return (self.m_reason is None)
+  # def __bool__(self): return (self.m_reason is None)
+  def __bool__(self): return self.value()
+
+class _eval_result_fd__c(_eval_result__c):
+  __slots__ = ("m_nvalue", "m_snodes")
+  def __init__(self, value=None, reason=None, nvalue=None, snodes=None):
+    _eval_result__c.__init__(self, value, reason)
+    self.m_nvalue = nvalue # the value of the subnode, used for propagation within a FD
+    self.m_snodes = snodes  # the list of sub nodes that are True
 
 
-def _get_result(res):
-  if(isinstance(res, bool)):
-    if(res): return _eval_result__c(value=res)
-    else: return _eval_result__c(value=res, reason=_reason_tree__c(res, "False found"))
+def _get_value__(res):
+  if(isinstance(res, _eval_result__c)):
+    return res.m_value
   else:
     return res
+
+
+################################################################################
+# Paths and partial paths manipulation
+################################################################################
+
+def _path_includes__(p, p_included):
+  # print(f"CHECKING INCLUSION: {p} include {p_included}")
+  idx_p = 0
+  idx_included = 0
+  len_p = len(p)
+  len_included = len(p_included)
+  while(idx_included < len_included):
+    if(idx_p < len_p):
+      if(p[idx_p] == p_included[idx_included]):
+        idx_included += 1
+      idx_p += 1
+    else:
+      # print("  => False")
+      return False
+  # print("  => True")
+  return True
+
+def _path_to_str__(path): return ("None" if(path is None) else "/".join(path))
+def _path_from_str__(s): return s.split('/')
+
+
+def _path_check_exists__(path_s, mapping, errors, additional_path=()):
+  path = _path_from_str__(path_s)
+  name = path[-1]
+  path = (additional_path + tuple(path[0:-1]))
+  decls = mapping.get(name)
+  if(decls is None):
+    errors.add(_unbound__c(name))
+  else:
+    refs = []
+    length = 0
+    for el in decls:
+      # if(_path_includes__(el[1], path + (path,))):
+      if(_path_includes__(el[1], path)):
+          refs.append(el)
+          length += 1
+    if(length == 0):
+      errors.add(_unbound__c(path_s, additional_path))
+    elif(length > 1):
+      errors.add(_ambiguous__c(path_s, tuple(el[1] for el in refs)))
+    else:
+      path = refs[0][0]
+  return path
+
+
+# def _get_result(res, expected=True):
+#   if(isinstance(res, bool)):
+#     if(res == expected): return _eval_result__c(value=res)
+#     else: return _eval_result__c(value=res, reason=_reason_tree__c(res, f"{res} found"))
+#   else:
+#     return res
 
 
 
@@ -110,35 +233,59 @@ def _get_result(res):
 # I have an issue where the value of a false feature is false (for the operator), while the feature diagram is true
 
 
+
+
 ################################################################################
 # Boolean constraints
 ################################################################################
-
 
 
 class _expbool__c(object):
   __slots__ = ("m_content","m_vars")
   def __init__(self, content):
     self.m_content = content
-    self.m_vars = tuple(el for sub in content for el in (sub.m_vars if(isinstance(sub, _expbool__c)) else (sub,)))
+    # self.m_vars = tuple(el for sub in content for el in (
+    #   sub.m_vars if(isinstance(sub, _expbool__c)) else ((sub,) if(isinstance(sub, str)) else ())))
 
   def get_name(self): return self.__class__.__name__
-  def get_reason(self, idx, content): return _reason_tree__c(self.get_name(), idx, content)
 
-  def __call__(self, product, idx=None, my_eval=eval_predicate):
-    values = tuple(my_eval(el, product, i) for i, el in enumerate(self.m_content))
+  def __call__(self, product, idx=None, expected=True):
+    # print(f"{self.__class__.__name__}.__call__({product}, {idx}, {expected})")
+    # results = tuple(my_eval(el, product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
+    results = tuple(_expbool__c._eval_generic__(el, product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
+    values = tuple(_get_value__(el) for el in results)
+    # print(f"  => values  = {values}")
     res = self._compute__(values)
-    if(res):
+    if(res == expected):
       reason = None
     else:
       tmp1 = zip(self.m_content, values)
-      message = " vs ".join(f"[{el[0]} = {el[1].value() if(isinstance(el[1], _eval_result__c)) else el[1]}]" for el in tmp1)
-      tmp2 = filter((lambda x: isinstance(x, _eval_result__c) and (x.m_reason is not None)), values)
+      message = " vs ".join(f"[{el[0]} = {el[1]}]" for el in tmp1)
+      tmp2 = filter((lambda x: isinstance(x, _eval_result__c) and (x.m_reason is not None)), results)
       sub_reasons = tuple(el.m_reason for el in tmp2)
-      reason = self.get_reason(idx, (message,) + sub_reasons) if(sub_reasons) else self.get_reason(idx, message)
+      reason = self._get_reason__(idx, (message,) + sub_reasons) if(sub_reasons) else self._get_reason__(idx, message)
     return _eval_result__c(res, reason)
  
   def __str__(self): return f"{self.get_name()}({', '.join(str(el) for el in self.m_content)})"
+
+  @staticmethod
+  def _eval_generic__(el, product, i, expected):
+    if(isinstance(el, _expbool__c)):
+      return el(product, i, expected)
+    else:
+      return product.get(el)
+
+  def _get_reason__(self, idx, content): return _reason_tree__c(self.get_name(), idx, content)
+  def _check_declarations__(self, path, mapping, errors):
+    self.m_content = tuple(map((lambda sub: _expbool__c._check_declarations_sub__(sub, path, mapping, errors)), self.m_content))
+    return self
+
+  @staticmethod
+  def _check_declarations_sub__(sub, path, mapping, errors):
+    if(isinstance(sub, _expbool__c)):
+      return sub._check_declarations__(path, mapping, errors)
+    elif(isinstance(sub, str)):
+      return _path_check_exists__(sub, mapping, errors, path)
 
 
 class Lt(_expbool__c):
@@ -147,6 +294,7 @@ class Lt(_expbool__c):
     _expbool__c.__init__(self, (left, right,))
   def _compute__(self, values):
     return (values[0] < values[1])
+  def _get_expected__(self, el, idx, expected): return None
       
 class Leq(_expbool__c):
   __slots__ = ()
@@ -154,6 +302,7 @@ class Leq(_expbool__c):
     _expbool__c.__init__(self, (left, right,))
   def _compute__(self, values):
     return (values[0] <= values[1])
+  def _get_expected__(self, el, idx, expected): return None
 
 class Eq(_expbool__c):
   __slots__ = ()
@@ -161,6 +310,7 @@ class Eq(_expbool__c):
     _expbool__c.__init__(self, (left, right,))
   def _compute__(self, values):
     return (values[0] == values[1])
+  def _get_expected__(self, el, idx, expected): return None
 
 class Geq(_expbool__c):
   __slots__ = ()
@@ -168,6 +318,7 @@ class Geq(_expbool__c):
     _expbool__c.__init__(self, (left, right,))
   def _compute__(self, values):
     return (values[0] >= values[1])
+  def _get_expected__(self, el, idx, expected): return None
 
 class Gt(_expbool__c):
   __slots__ = ()
@@ -175,6 +326,7 @@ class Gt(_expbool__c):
     _expbool__c.__init__(self, (left, right,))
   def _compute__(self, values):
     return (values[0] > values[1])
+  def _get_expected__(self, el, idx, expected): return None
 
 
 class And(_expbool__c):
@@ -182,31 +334,31 @@ class And(_expbool__c):
   def __init__(self, *args):
     _expbool__c.__init__(self, args)
   def _compute__(self, values):
-    return all(bool(el) for el in values)
-  # def __call__(self, product):
-  #   for element in self.m_content:
-  #     if(not eval(element, product)): return False
-  #   return True
+    return all(values)
+  def _get_expected__(self, el, idx, expected):
+    if(expected is True): return True
+    else: return None
 
 class Or(_expbool__c):
   __slots__ = ()
   def __init__(self, *args):
     _expbool__c.__init__(self, args)
   def _compute__(self, values):
-    return any(bool(el) for el in values)
-  # def __call__(self, product):
-  #   for element in self.m_content:
-  #     if(eval(element, product)): return True
-  #   return False
+    return any(values)
+  def _get_expected__(self, el, idx, expected):
+    if(expected is not False): return None
+    else: return False
 
 class Not(_expbool__c):
   __slots__ = ()
   def __init__(self, arg):
-    _expbool__c.__init__(self, (args,))
+    _expbool__c.__init__(self, (arg,))
   def _compute__(self, values):
-    return not bool(values[0])
-  # def __call__(self, product):
-  #   return not (eval(self.m_content, product))
+    return not values[0]
+  def _get_expected__(self, el, idx, expected):
+    if(expected is True): return False
+    elif(expected is False): return True
+    else: return None
 
 class Xor(_expbool__c):
   __slots__ = ()
@@ -215,17 +367,12 @@ class Xor(_expbool__c):
   def _compute__(self, values):
     res = False
     for element in values:
-      if(bool(element)):
+      if(_get_value__(element)):
         if(res): return False
         else: res = True
     return res
-    # def __call__(self, product):
-    #   res = False
-    #   for element in self.m_content:
-    #     if(eval(element, product)):
-    #       if(res): return False
-    #       else: res = True
-    #   return res
+  def _get_expected__(self, el, idx, expected):
+    return None
 
 class Conflict(_expbool__c):
   __slots__ = ()
@@ -234,39 +381,31 @@ class Conflict(_expbool__c):
   def _compute__(self, values):
     res = False
     for element in values:
-      if(bool(element)):
+      if(_get_value__(element)):
         if(res): return False
         else: res = True
     return True
-  # def __call__(self, product):
-  #   res = False
-  #   for element in self.m_content:
-  #     if(eval(element, product)):
-  #       if(res): return False
-  #       else: res = True
-  #   return True
+  def _get_expected__(self, el, idx, expected):
+    return None
+
 
 class Implies(_expbool__c):
   __slots__ = ()
   def __init__(self, left, right):
     _expbool__c.__init__(self, (left, right,))
   def _compute__(self, values):
-    return ((not bool(values[0])) or bool(values[1]))
-  # def __call__(self, product):
-  #   left = eval(self.m_content[0], product)
-  #   right = eval(self.m_content[1], product)
-  #   return ((not left) or (right))
+    return ((not _get_value__(values[0])) or _get_value__(values[1]))
+  def _get_expected__(self, el, idx, expected):
+    return None
 
 class Iff(_expbool__c):
   __slots__ = ()
   def __init__(self, left, right):
     _expbool__c.__init__(self, (left, right,))
   def _compute__(self, values):
-    return (bool(values[0]) == bool(values[1]))
-  # def __call__(self, product):
-  #   left = eval(self.m_content[0], product)
-  #   right = eval(self.m_content[1], product)
-  #   return (left == right)
+    return (_get_value__(values[0]) == _get_value__(values[1]))
+  def _get_expected__(self, el, idx, expected):
+    return None
 
 
 
@@ -290,12 +429,12 @@ def _add_domain_spec(l, spec):
         else:
           l.append(arg)
       else:
-        l.append((arg, arg))
+        l.append((arg, arg+1))
 
 def _check_interval(interval, value):
   if((interval[0] is not None) and (value < interval[0])):
     return False
-  if((interval[1] is not None) and (value > interval[1])):
+  if((interval[1] is not None) and (value >= interval[1])):
     return False
   return True
 
@@ -308,7 +447,6 @@ def _check_domain(domain, value):
     return True
 
 
-
 class _fdattribute_c(object): pass
 
 
@@ -319,16 +457,13 @@ class Class(_fdattribute_c):
   def __call__(self, value):
     return isinstance(value, self.m_class)
 
-
 class Bool(Class):
   __slots__ = ()
   def __init__(self): Class.__init__(self, bool)
 
-
 class String(Class):
   __slots__ = ()
   def __init__(self):  Class.__init__(self, str)
-
 
 class Enum(Class):
   __slots__ = ()
@@ -337,7 +472,6 @@ class Enum(Class):
        Class.__init__(self, domain)
     else:
       raise ValueError(f"ERROR: expected an enum class (found {domain})")
-
 
 class Int(Class):
   __slots__ = ("m_domain",)
@@ -352,6 +486,8 @@ class Int(Class):
     else:
       return False
 
+  def description(self):
+    return f'{self.m_domain[0][0]} <= x < {self.m_domain[0][1]}'
 
 class Float(Class):
   __slots__ = ("m_domain",)
@@ -366,180 +502,281 @@ class Float(Class):
     else:
       return False
 
-
-class List(_fdattribute_c):
-  __slots__ = ("m_size", "m_content",)
-  def __init__(self, size=None, kind=None):
+class List(Class):
+  __slots__ = ("m_size", "m_kind",)
+  def __init__(self, size=None, spec=None):
+    Class.__init__(self, (list, tuple))
     self.m_size = []
     if(size is not None):
-      _add_domain_spec(self.m_size, *size)
-    self.m_content = kind
+      _add_domain_spec(self.m_size, size)
+    self.m_kind = spec
 
   def __call__(self, value):
-    if(isinstance(value, (tuple, list))):
+    if(Class.__call__(self, value)):
+      # print(f"_check_domain({self.m_size}, {len(value)}) = {_check_domain(self.m_size, len(value))}")
       if(_check_domain(self.m_size, len(value))):
         if(self.m_kind is None):
           return True
         else:
           for el in value:
-            if(not self.m_kind(el)): return False
+            if(not self.m_kind(el)):
+              return False
           return True
     return False
 
 
 
 ################################################################################
-# Feature Groups
+# Feature Diagrams, Generalized as Groups
 ################################################################################
 
-# Ok, stuff are more complex than anticipated:
-# we need to manage attributes, and error messages.
-# Hence the return type is e
-
-# class _fdgroup_res__c(object):
-#   __slots__ = ("m_value", "m_enforced")
-#   def __init__(self, value, enforced):
-#     self.m_value = value
-#     self.m_enforced = enforced
-
-#   def __bool__(self): return self.m_value
-
-#   @staticmethod
-#   def monad(content, operator):
-#     value = operator(map((lambda x: x.m_value if(isinstance(x, _fdgroup_res__c)) else x), content))
-#     enforced = any(map((lambda x: x.m_enforced if(isinstance(x, _fdgroup_res__c)) else False), content))
-#     return _fdgroup_res__c(value, enforced)
-
-# need to have a lookup also for ctc!
-
-def _path_includes(p, p_included):
-  idx_p = 0
-  idx_included = 0
-  len_p = len(p)
-  len_included = len(p_included)
-  while(idx_included < len_included):
-    if(idx_p < len_p):
-      if(p[idx_p] == p_included[idx_included]):
-        idx_included += 1
-      idx_p += 1
-    else:
-      return False
-  return True
-
-# API:
-# function that generates the lookup on demand, going down,
-# with _generate_lookup__rec(self, path_to_self, res), res beeing the lookup table being generated
-# !! need to consider also attributes that have the same possibility of name clash with features
-
-# also, something that could be nice for error reporting, is that we propagate downward the expected value
-# the issue is that, the expected value is function dependent: I don't want to construct a tuple for every method call
-# also, what is the expected value of "xor" parameters for instance... depends if the problem of the xor is no true, or too much
-# well, we could choose arbitrarily true or false, but it means that we don't know why a term has the opposite value
-# dunno, if no expected value is given, document everything? Up until a feature, since its value must correspond to the value of its content.
-# it's kind of a undertaking, but it can be done
-
-# __call__(self, product, idx=None, my_eval=eval_predicate, expected_value=True)
-
 class _fdgroup__c(object):
-  __slots__ = ( "m_name", "m_content", "m_ctcs", "m_attributes", "m_lookup", )
-  def __init__(self, name, content, ctcs, attributes):
+  __slots__ = ( "m_name", "m_content", "m_ctcs", "m_attributes", "m_lookup", "m_path", "m_errors")
+
+  ##########################################
+  # constructor API
+
+  def __init__(self, *args, **kwargs):
+  # def __init__(self, name, content, ctcs, attributes):
+    name, content, ctcs, attributes = _fdgroup__c._manage_constructor_args__(*args, **kwargs)
     self.m_name = name
     self.m_content = content
     self.m_ctcs = ctcs
     self.m_attributes = attributes
     self.m_lookup = None
+    self.m_path = None
+    self.m_errors = None
+
+  @staticmethod
+  def _manage_constructor_args__(*args, **kwargs):
+    # print(f"_manage_constructor_args__({args}, {kwargs})")
+    if(bool(args) and isinstance(args[0], str)):
+      name = args[0]
+      args = args[1:]
+    else:
+      name = None
+    attributes = tuple((key, spec) for key, spec in kwargs.items())
+    content = []
+    ctcs = []
+    for el in args:
+      if(isinstance(el, _fdgroup__c)):
+        content.append(el)
+      else:
+        ctcs.append(el)
+    return name, content, ctcs, attributes
+
+  ##########################################
+  # base API
+
+  @property
+  def name(self):
+    return self.m_name
+  @property
+  def path(self):
+    return self.m_path
+  @property
+  def children(self):
+    return self.m_content
+  @property
+  def cross_tree_constraints(self):
+    return self.m_ctcs
+  @property
+  def attributes(self):
+    return self.m_attributes
+  def has_attributes(self):
+    return len(self.attributes) != 0
+  def is_leaf(self):
+    return len(self.children) == 0
 
   ##########################################
   # generate_lookup API
 
-  def generate_lookup(self):
-    if(self.m_lookup is None):
-      self.m_lookup = {}
-      self._generate_lookup__rec([], self.m_lookup)
-
-  def _generate_lookup__rec(self, path_to_self, res):
-    # 1. if local names, add it to the table, and check no duplicates
-    if(self.m_name is not None):
-      path_to_self.append(self.m_name)
-      _fdgroup__c._check_duplicate__(self, self.m_name, path_to_self, res)
-    # 2. add subs
-    for sub in self.m_content:
-      sub._generate_lookup__rec(path_to_self, res)
-    # 3. add attributes
-    path_to_self.append(None)
-    for att_def in self.m_attributes.items():
-      path_to_self[-1] = att_def[0]
-      _fdgroup__c._check_duplicate__(att_def, att_def[0], path_to_self, res)
-    path_to_self.pop()
-    # 4. check ctcs
-    for ctc in self.m_ctcs:
-      # need to check what could be a normal form for constraints that could work with a normal form of product. In my point of view: partial paths
-      # we take the product with partial paths, translate it with non ambiguous flat mapping, and go as before. -> check vs self for features, and vs attribute_def for attributes
-      # could work
-    # 5. reset path_to_self
-    path_to_self.pop()
-
-  @staticmethod
-  def _check_duplicate__(el, name, path, res):
-    tmp = res.get(name)
-    if(tmp is not None):
-      if(any((path == el[1]) for el in tmp)):
-        raise Exception(f"ERROR: several features with the same path: \"{path}\"")
-      tmp.append( (el, path,) )
-    else:
-      res[name] = [(el, path,)]
-
-
   def clean(self): self.m_lookup = None
   def check(self):
-    if(self.m_lookup is not None): return
-    # 1. create lookup table
-    self.m_lookup = {}
-    if(self.m_name is None):
-      manage_paths = lambda ps: ps
+    return self.generate_lookup()
+
+  def generate_lookup(self):
+    if(self.m_lookup is None):
+      self.m_errors = _decl_errors__c()
+      self.m_lookup = {}
+      self._generate_lookup__rec([], 0, self.m_lookup, self.m_errors)
+    return self.m_errors
+
+  def nf_constraint(self, c):
+    errors = _decl_errors__c()
+    if(isinstance(c, str)):
+      tmp = And(c)
+      tmp = tmp._check_declarations__(self.m_path, self.m_lookup, errors)
+      res = tmp.m_content[0]
     else:
-      self.m_lookup[self.m_name] = [(self, (self.m_name,),)]
-      manage_paths = lambda ps: list((el[0], ((self.m_name,) + el[1]),) for el in ps)
-    for sub in self.m_content:
-      for feature, paths in sub.m_lookup.items():
+      res = c._check_declarations__(self.m_path, self.m_lookup, errors)
+    return (res, errors)
+
+  def nf_product(self, product):
+    errors = _decl_errors__c()
+    res = {}
+    for key, val in product.items():
+      res[_path_check_exists__(key, self.m_lookup, errors)] = val
+    return (res, errors)
+
+  def _generate_lookup__rec(self, path_to_self, idx, res, errors):
+    # print(f"_generate_lookup__rec({self.m_name}, {idx}, {path_to_self}, {res}, {errors})")
+    # 1. if local names, add it to the table, and check no duplicates
+    path_to_self.append(idx if(self.m_name is None) else self.m_name)
+    local_path = tuple(path_to_self)
+    self.m_path = local_path
+    if(self.m_name is not None):
+      _fdgroup__c._check_duplicate__(self, self.m_name, local_path, res, errors)
+    # 2. add subs
+    for i, sub in enumerate(self.m_content):
+      sub._generate_lookup__rec(path_to_self, i, res, errors)
+    # 3. add attributes
+    for att_def in self.m_attributes:
+      _fdgroup__c._check_duplicate__(att_def, att_def[0], local_path, res, errors)
+    # 4. check ctcs
+    print(self.m_ctcs)
+    self.m_ctcs = tuple(ctc._check_declarations__(local_path, res, errors) for ctc in self.m_ctcs)
+    path_to_self.pop()
+    # 5. reset path_to_self
+
+  @staticmethod
+  def _check_duplicate__(el, name, path, res, errors):
+    # print(f"_check_duplicate__({el}, {name}, {path}, {res})")
+    tmp = res.get(name)
+    if(tmp is not None):
+      others = []
+      for el in tmp:
+        if(_path_includes__(path, el[1])):
+          others.append(el[1])
+      if(bool(others)):
+        errors.add(_ambiguous__c(name, path, others))
+        # raise Exception(f"ERROR: ambiguous declaration of feature \"{_path_to_str__(path)}\" (found \"{_path_to_str__(other)}\")")
+      tmp.append( (el, (path),) )
+    else:
+      res[name] = [(el, (path),)]
+
+  ##########################################
+  # call API
+
+  def __call__(self, product, expected=True):
+    return self._eval_generic__(product, _fdgroup__c._f_get_deep__, expected)
+
+  def _eval_generic__(self, product, f_get, expected=True):
+    # print(f"_eval_generic__({self.m_path}, {product}, {f_get}, {expected})")
+    expected_att = (_empty__ if(expected is False) else expected)
+
+    results_content = tuple(f_get(el, product, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
+    # print(f" => computed results_content: {results_content}")
+    # print(f"   reasons = {', '.join(str(el.m_reason) for el in results_content)}")
+    result_att = tuple(self._manage_attribute__(el, product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_attributes))
+    # print(f" => computed result_att: {result_att}")
+    # print(f"   reasons = {', '.join(str(el.m_reason) for el in result_att)}")
+    result_ctc = tuple(_expbool__c._eval_generic__(el, product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_ctcs))
+    # print(f" => computed result_ctc: {result_ctc}")
+    # print(f"   reasons = {', '.join(str(el.m_reason) for el in result_ctc)}")
 
 
-    # 3. check and update ctcs
+    values = tuple(el.m_value for resu in (results_content, result_att, result_ctc) for el in resu)
+    res = self._compute__(values)
+    snodes = tuple(v for el in results_content for v in el.m_snodes)
 
-  def _eval_generic__(self, product, fget):
-    return 
-    res = self._start__()
-    for element in self.m_content:
-      val = fget(element, product)
-      res = self._combine__(res, val)
-    return self._conclude__(res)
+    # print(f" => computed res: {res}")
 
-  def _eval__(self, product): return self._eval_generic__(product, self.get)
-  def _eval_shallow__(self, product): return self._eval_generic__(product, self.get_shallow)
+    # check consistency with name
+    reason = None
+    if(self.m_name is not None):
+      nvalue = product.get(self, _empty__)
+      if(nvalue is _empty__):
+        reason = f"Feature {_path_to_str__(self.m_path)} has no value in the input product"
+      elif((not nvalue) and snodes):
+        tmp = ', '.join(f"\"{_path_to_str__(el.m_path)}\"" for el in snodes)
+        reason = f"Feature {_path_to_str__(self.m_path)} should be set to True due to validated subfeatures (found: {tmp})"
+      elif(nvalue and (not res)):
+        reason = f"Feature {_path_to_str__(self.m_path)} is selected while its content is False"
+      elif(nvalue):
+        snodes = snodes + (self,)
+    else:
+      nvalue = res
+
+    value = all(el.m_value for el in results_content) and (reason is None)
+
+    reasons = None
+    if((nvalue != expected) or (not value)):
+      reasons = []
+      if(reason is not None): reasons.append(reason)
+      if((nvalue != expected)): reasons.append(f"Feature {_path_to_str__(self.m_path)} has value {nvalue} (expected {expected})")
+      for el in (el for resu in (results_content, result_att, result_ctc) for el in resu):
+        if(el.m_reason is not None): reasons.append(el.m_reason)
+      reasons = _reason_tree__c(self.__class__.__name__, self.m_path, reasons)
+
+    return _eval_result_fd__c(value, reasons, nvalue, snodes)
+
+  def _f_get_shallow__(self, product, expected=True):
+    if(self.m_name is None):
+      return self._eval_generic__(product, _fdgroup__c._f_get_shallow__, expected)
+    else:
+      nvalue = product.get(self, _empty__)
+      if(v is _empty__):
+        value = False
+        nvalue = False
+        reasons = [f"Feature {_path_to_str__(self.m_path)} has no value in the input product"]
+        return _eval_result_fd__c(value, _reason_tree__c(self.__class__.__name__, self.m_path, reasons), nvalue, ())
+      else:
+        return _eval_result_fd__c(True, None, nvalue, ())
+
+  def _f_get_deep__(self, product, expected=True):
+    return self._eval_generic__(product, _fdgroup__c._f_get_deep__, expected)
+
+  def _manage_attribute__(self, att, product, idx, expected):
+    name, spec = att
+    value = product.get(att, _empty__)
+    reason = None
+    if(value is _empty__):
+      if(expected):
+        return _eval_result__c(False, _reason_tree__c(name, idx, "Attribute has no value in the input product"))
+      else:
+        return _eval_result__c(False)
+    else:
+      res = spec(value)
+      if(expected == res):
+        return _eval_result__c(res)
+      else:
+        return _eval_result__c(res, _reason_tree__c(name, idx, f"Attribute has erroneous value \"{value}\" => specification returns {res}"))
+
+  ##########################################
+  # Update product API
+
+
+
+
   def _ensure_false__(self, name_parent, product):
     for element in self.m_content:
-      if(self.get_shallow(element)):
+      if(self.get_shallow(element,product)):
         raise ValueError(f"ERROR: the feature {self.get_name(element)} is activated while the parent feature {name_parent} is not")
 
-  @staticmethod
-  def content_to_nf(args):
-    return tuple((arg if(isinstance(arg, FD)) else FD(arg)) for arg in args)
+  # @property
+  # def sub_features(self):
+  #   return self.m_content
 
-  @staticmethod
-  def get(element, product):
-    if(isinstance(element, FD)): return element._eval__(product)
-    elif(isinstance(element, str)): return product[element]
-    else: return element
-  @staticmethod
-  def get_shallow(element, product):
-    if(isinstance(element, FD)): return element._eval_shallow__(product)
-    elif(isinstance(element, str)): return product[element]
-    else: return element
-  @staticmethod
-  def get_name(element):
-    if(isinstance(element, FD)): return element.get_name()
-    elif(isinstance(element, str)): return element
-    else: return element
+  # @staticmethod
+  # def convert_to_FD(args):
+  #   return tuple((arg if(isinstance(arg, FD)) else FD(arg)) for arg in args)
+
+  # @staticmethod
+  # def get(element, product):
+  #   if(isinstance(element, FD)): return element._eval__(product)
+  #   elif(isinstance(element, str)): return product[element]
+  #   else: return element
+  # @staticmethod
+  # def get_shallow(element, product):
+  #   if(isinstance(element, FD)): return element._eval_shallow__(product)
+  #   elif(isinstance(element, str)): return product[element]
+  #   else: return element
+  # @staticmethod
+  # def get_name(element):
+  #   if(isinstance(element, FD)): return element.get_name()
+  #   elif(isinstance(element, str)): return element
+  #   else: return element
 
   def _remove_subtree_from_product__(self, product):
     for element in self.m_content:
@@ -556,43 +793,41 @@ class _fdgroup__c(object):
 
 
 class FDAnd(_fdgroup__c):
-  def __init__(self, *args):
-    self.m_content = _fdgroup__c.content_to_nf(args)
-  @staticmethod
-  def _start__(): return True
-  @staticmethod
-  def _combine__(left, right): return left and right
-  @staticmethod
-  def _conclude__(value): return value
+  def __init__(self, *args, **kwargs):
+    _fdgroup__c.__init__(self, *args, **kwargs)
+  def _compute__(self, values):
+    return all(values)
+  def _get_expected__(self, el, i, expected):
+    return (True if(expected) else None)
+
 class FDAny(_fdgroup__c):
-  def __init__(self, *args):
-    self.m_content = _fdgroup__c.content_to_nf(args)
-  @staticmethod
-  def _start__(): return True
-  @staticmethod
-  def _combine__(left, right): return True
-  @staticmethod
-  def _conclude__(value): return value
+  def __init__(self, *args, **kwargs):
+    _fdgroup__c.__init__(self, *args, **kwargs)
+  def _compute__(self, values):
+    return True
+  def _get_expected__(self, el, i, expected):
+    return None
+
 class FDOr(_fdgroup__c):
-  def __init__(self, *args):
-    self.m_content = _fdgroup__c.content_to_nf(args)
-  @staticmethod
-  def _start__(): return False
-  @staticmethod
-  def _combine__(left, right): return left or right
-  @staticmethod
-  def _conclude__(value): return value
+  def __init__(self, *args, **kwargs):
+    _fdgroup__c.__init__(self, *args, **kwargs)
+  def _compute__(self, values):
+    return any(values)
+  def _get_expected__(self, el, i, expected):
+    return (False if(not expected) else None)
+
 class FDXor(_fdgroup__c):
-  def __init__(self, *args):
-    self.m_content = _fdgroup__c.content_to_nf(args)
-  @staticmethod
-  def _start__(): return 0
-  @staticmethod
-  def _combine__(left, right):
-    if(right): return left + 1
-    else: return left
-  @staticmethod
-  def _conclude__(value): return (value == 1)
+  def __init__(self, *args, **kwargs):
+    _fdgroup__c.__init__(self, *args, **kwargs)
+  def _compute__(self, values):
+    res = False
+    for element in values:
+      if(_get_value__(element)):
+        if(res): return False
+        else: res = True
+    return res
+  def _get_expected__(self, el, i, expected):
+    return None
 
   def combine_product(self, default, update, res):
     has_update = False
@@ -625,12 +860,11 @@ class FD(object):
   __slots__ = ("m_name", "m_groups", "m_ctcs", "m_attributes")
 
   def __init__(self, decl, *args, **kwargs):
-    if(isinstance(decl, str)): self.m_name = decl
-    else:
-      raise Exception(f"FD constructor only accepts str as name (type \"{decl.__class__.__name__}\" found)")
+    assert isinstance(decl, str), f"FD constructor only accepts str as name (type \"{decl.__class__.__name__}\" found)"
+    self.m_name = decl
 
     self.m_groups =[]
-    self.m_ctcs =[]
+    self.m_ctcs =[] # ctc: cross tree constraint
 
     for sub in args:
       if(isinstance(sub, _fdgroup__c)):
@@ -641,7 +875,6 @@ class FD(object):
         raise Exception(f"FD constructor only accepts fdgroup, bool, expbool or str as content (type \"{sub.__class__.__name__}\" found)")
 
     self.m_groups = tuple(self.m_groups)
-    self.m_ctcs = And(*self.m_ctcs)
 
     self.m_attributes = []
     for variable_name, spec in kwargs.items():
@@ -652,6 +885,22 @@ class FD(object):
       else:
         raise Exception(f"FD attribute specification only accept expbool or str (type \"{spec.__class__.__name__}\" found)")
 
+  @property
+  def name(self):
+    return self.m_name
+  @property
+  def children(self):
+    return self.m_groups
+  @property
+  def cross_tree_constraints(self):
+    return self.m_ctcs
+  @property
+  def attributes(self):
+    return self.m_attributes
+  def has_attributes(self):
+    return len(self.attributes) != 0
+  def is_leaf(self):
+    return len(self.children) == 0
 
   def get_name(self):
     return self.m_name
@@ -673,7 +922,7 @@ class FD(object):
 
     # 2. check consistency of cross tree constraints
     if(decl):
-      ctc = self.m_ctcs(product)
+      ctc = And(*self.m_ctcs)(product)
       if(not ctc):
         raise ValueError(f"ERROR: cross tree constraints of feature {self.get_name()} should be valid (due to {self.get_name()} being activated)")
 
@@ -736,8 +985,7 @@ class FD(object):
       group._remove_subtree_from_product__(product)
 
   def __call__(self, product):
-    tmp = self._eval__(product)
-    return tmp
+    return self._eval__(product)
     # return tmp[0] and tmp[1]
 
   def combine_product(self, default, update, res=None):

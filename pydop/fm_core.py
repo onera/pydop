@@ -1,30 +1,44 @@
- 
+
 # This file is part of the pydop library.
 # Copyright (c) 2021 ONERA.
-# 
+#
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU Lesser General Public License as
 # published by the Free Software Foundation, version 3.
-# 
+#
 # This program is distributed in the hope that it will be useful, but
 # WITHOUT ANY WARRANTY; without even the implied warranty of
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU
 # Lesser General Public License for more details.
-# 
+#
 # You should have received a copy of the GNU Lesser General Public
 # License along with this program. If not, see
 # <http://www.gnu.org/licenses/>.
-# 
+#
 
 # Author: Michael Lienhardt
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
 
-def eval_predicate(el, product, idx=None):
+_empty__ = object()
+_forward__ = object()
+
+class product_default(object):
+  __slots__ = ("m_content",)
+  def __init__(self, content):
+    self.m_content = content
+  def get(self, el, default=_forward__):
+    if(default is _forward__):
+      default = el
+    return self.m_content.get(el, default)
+
+def pred_eval(el, product, idx=None, expected=True):
   res = None
   if(callable(el)):
-    res = el(product, idx, eval_predicate)
+    res = el(product, idx, pred_eval, expected)
+  elif(isinstance(el, pred_var)):
+    res = product.get(el.m_content, _empty__)
   else:
     res = product.get(el, el)
   return res
