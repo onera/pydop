@@ -57,7 +57,7 @@ class _ambiguous__c(object):
     if(self.m_path is None):
       return f"ERROR: reference \"{self.m_name}\" is ambiguous (corresponds to paths: {tmp})"
     else:
-      return f"ERROR: reference \"{self.m_path}/{self.m_name}\" is ambiguous (corresponds to paths: {tmp})"
+      return f"ERROR: reference \"{_path_to_str__(self.m_path)}[{self.m_name}]\" is ambiguous (corresponds to paths: {tmp})"
 
 
 class _decl_errors__c(object):
@@ -184,7 +184,8 @@ def _path_check_exists__(path_s, mapping, errors, additional_path=()):
     if(length == 0):
       errors.add(_unbound__c(path_s, additional_path))
     elif(length > 1):
-      errors.add(_ambiguous__c(path_s, tuple(el[1] for el in refs)))
+      # print(f"AMBIGIUTY: {path_s} => {length} | {refs}")
+      errors.add(_ambiguous__c(path_s, None, tuple(el[1] for el in refs)))
     else:
       path = refs[0][0]
   return path
@@ -543,9 +544,7 @@ class _fdgroup__c(object):
     self.m_content = content
     self.m_ctcs = ctcs
     self.m_attributes = attributes
-    self.m_lookup = None
-    self.m_path = None
-    self.m_errors = None
+    self.clean()
 
   @staticmethod
   def _manage_constructor_args__(*args, **kwargs):
@@ -561,8 +560,10 @@ class _fdgroup__c(object):
     for el in args:
       if(isinstance(el, _fdgroup__c)):
         content.append(el)
-      else:
+      elif(isinstance(el, _expbool__c)):
         ctcs.append(el)
+      else:
+        raise Exception(f"ERROR: unexpected FD subtree (found type \"{el.__class__.__name__}\")")
     return name, content, ctcs, attributes
 
   ##########################################
@@ -591,7 +592,11 @@ class _fdgroup__c(object):
   ##########################################
   # generate_lookup API
 
-  def clean(self): self.m_lookup = None
+  def clean(self):
+    self.m_lookup = None
+    self.m_path = None
+    self.m_errors = None
+
   def check(self):
     return self.generate_lookup()
 
@@ -622,7 +627,7 @@ class _fdgroup__c(object):
   def _generate_lookup__rec(self, path_to_self, idx, res, errors):
     # print(f"_generate_lookup__rec({self.m_name}, {idx}, {path_to_self}, {res}, {errors})")
     # 1. if local names, add it to the table, and check no duplicates
-    path_to_self.append(idx if(self.m_name is None) else self.m_name)
+    path_to_self.append(str(idx) if(self.m_name is None) else self.m_name)
     local_path = tuple(path_to_self)
     self.m_path = local_path
     if(self.m_name is not None):
@@ -634,7 +639,7 @@ class _fdgroup__c(object):
     for att_def in self.m_attributes:
       _fdgroup__c._check_duplicate__(att_def, att_def[0], local_path, res, errors)
     # 4. check ctcs
-    print(self.m_ctcs)
+    # print(self.m_ctcs)
     self.m_ctcs = tuple(ctc._check_declarations__(local_path, res, errors) for ctc in self.m_ctcs)
     path_to_self.pop()
     # 5. reset path_to_self
@@ -662,7 +667,9 @@ class _fdgroup__c(object):
     return self._eval_generic__(product, _fdgroup__c._f_get_deep__, expected)
 
   def _eval_generic__(self, product, f_get, expected=True):
-    # print(f"_eval_generic__({self.m_path}, {product}, {f_get}, {expected})")
+    # print(f"_eval_generic__([{self.__class__.__name__}]{self.m_path}, {product}, {f_get}, {expected})")
+    # print(f"_eval_generic__([{self.__class__.__name__}]{_path_to_str__(self.m_path)})")
+    print(f"_eval_generic__({_path_to_str__(self.m_path)})")
     expected_att = (_empty__ if(expected is False) else expected)
 
     results_content = tuple(f_get(el, product, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
@@ -677,7 +684,10 @@ class _fdgroup__c(object):
 
 
     values = tuple(el.m_value for resu in (results_content, result_att, result_ctc) for el in resu)
-    res = self._compute__(values)
+    nvalue = product.get(self, _empty__)
+    print(f"  => compute {values}, {nvalue}")
+    res = self._compute__(values, nvalue)
+    print(f"  => res = {res}")
     snodes = tuple(v for el in results_content for v in el.m_snodes)
 
     # print(f" => computed res: {res}")
@@ -685,7 +695,7 @@ class _fdgroup__c(object):
     # check consistency with name
     reason = None
     if(self.m_name is not None):
-      nvalue = product.get(self, _empty__)
+      # nvalue = product.get(self, _empty__)
       if(nvalue is _empty__):
         reason = f"Feature {_path_to_str__(self.m_path)} has no value in the input product"
       elif((not nvalue) and snodes):
@@ -792,10 +802,19 @@ class _fdgroup__c(object):
     return self.get_shallow(res)
 
 
+class FDLeaf(_fdgroup__c):
+  def __init__(self, name, **kwargs):
+    assert(isinstance(name, str))
+    _fdgroup__c.__init__(self, name, **kwargs)
+  def _compute__(self, values, nvalue):
+    return nvalue
+  def _get_expected__(self, el, i, expected):
+    return None
+
 class FDAnd(_fdgroup__c):
   def __init__(self, *args, **kwargs):
     _fdgroup__c.__init__(self, *args, **kwargs)
-  def _compute__(self, values):
+  def _compute__(self, values, nvalue):
     return all(values)
   def _get_expected__(self, el, i, expected):
     return (True if(expected) else None)
@@ -803,7 +822,7 @@ class FDAnd(_fdgroup__c):
 class FDAny(_fdgroup__c):
   def __init__(self, *args, **kwargs):
     _fdgroup__c.__init__(self, *args, **kwargs)
-  def _compute__(self, values):
+  def _compute__(self, values, nvalue):
     return True
   def _get_expected__(self, el, i, expected):
     return None
@@ -811,7 +830,7 @@ class FDAny(_fdgroup__c):
 class FDOr(_fdgroup__c):
   def __init__(self, *args, **kwargs):
     _fdgroup__c.__init__(self, *args, **kwargs)
-  def _compute__(self, values):
+  def _compute__(self, values, nvalue):
     return any(values)
   def _get_expected__(self, el, i, expected):
     return (False if(not expected) else None)
@@ -819,7 +838,7 @@ class FDOr(_fdgroup__c):
 class FDXor(_fdgroup__c):
   def __init__(self, *args, **kwargs):
     _fdgroup__c.__init__(self, *args, **kwargs)
-  def _compute__(self, values):
+  def _compute__(self, values, nvalue):
     res = False
     for element in values:
       if(_get_value__(element)):
@@ -851,197 +870,9 @@ class FDXor(_fdgroup__c):
       _fdgroup__c.combine_product(self, default, update, res)
 
 
-
-################################################################################
-# Feature diagrams
-################################################################################
-
-class FD(object):
-  __slots__ = ("m_name", "m_groups", "m_ctcs", "m_attributes")
-
-  def __init__(self, decl, *args, **kwargs):
-    assert isinstance(decl, str), f"FD constructor only accepts str as name (type \"{decl.__class__.__name__}\" found)"
-    self.m_name = decl
-
-    self.m_groups =[]
-    self.m_ctcs =[] # ctc: cross tree constraint
-
-    for sub in args:
-      if(isinstance(sub, _fdgroup__c)):
-        self.m_groups.append(sub)
-      elif(isinstance(sub, (bool, _expbool__c, str))):
-        self.m_ctcs.append(sub)
-      else:
-        raise Exception(f"FD constructor only accepts fdgroup, bool, expbool or str as content (type \"{sub.__class__.__name__}\" found)")
-
-    self.m_groups = tuple(self.m_groups)
-
-    self.m_attributes = []
-    for variable_name, spec in kwargs.items():
-      if(isinstance(variable_name, str) and isinstance(spec, _fdattribute_c)):
-        self.m_attributes.append((variable_name, spec,))
-      elif(not isinstance(variable_name, str)):
-        raise Exception(f"FD attribute name must be a str (type \"{variable_name.__class__.__name__}\" found)")
-      else:
-        raise Exception(f"FD attribute specification only accept expbool or str (type \"{spec.__class__.__name__}\" found)")
-
-  @property
-  def name(self):
-    return self.m_name
-  @property
-  def children(self):
-    return self.m_groups
-  @property
-  def cross_tree_constraints(self):
-    return self.m_ctcs
-  @property
-  def attributes(self):
-    return self.m_attributes
-  def has_attributes(self):
-    return len(self.attributes) != 0
-  def is_leaf(self):
-    return len(self.children) == 0
-
-  def get_name(self):
-    return self.m_name
-
-  def _eval_shallow__(self, product):
-    return product[self.m_name]
-
-  def _eval__(self, product):
-    decl = self._eval_shallow__(product)
-
-    # 1. check consistency of subtree
-    for i, group in enumerate(self.m_groups):
-        tmp = group._eval__(product)
-        if(decl):
-          if(not tmp):
-            raise ValueError(f"ERROR: group {i} of feature {self.get_name()} should be True (due to {self.get_name()} being True)")
-        else:
-          group._ensure_false__(self.get_name(), product)
-
-    # 2. check consistency of cross tree constraints
-    if(decl):
-      ctc = And(*self.m_ctcs)(product)
-      if(not ctc):
-        raise ValueError(f"ERROR: cross tree constraints of feature {self.get_name()} should be valid (due to {self.get_name()} being activated)")
-
-    if(decl):
-      for att, spec in self.m_attributes:
-        tmp = spec(product[att])
-        if(not tmp):
-          raise ValueError(f"ERROR: the value of {att} (in feature {self.get_name()}) does not validate its specification")
-    else:
-      for att, spec in self.m_attributes:
-        tmp = (att not in product)
-        if(not tmp):
-          raise ValueError(f"ERROR: the attribute {att} (in feature {self.get_name()}) should not be in the product (due to {self.get_name()} not being activated)")
-
-
-    return decl
-
-
-  # def _eval__(self, product):
-  #   decl = product[self.m_name]
-  #   ctc = self.m_ctcs(product)
-  #   # print(f"self.m_name = {self.m_name}, ctc = {ctc}")
-
-  #   consistency = True
-  #   res = True
-  #   for i, group in enumerate(self.m_groups):
-  #     tmp = group._eval__(product)
-  #     consistency = consistency and tmp[0]
-  #     res = res and tmp[1]
-  #     for n in group._get_subname__():
-  #       tmp = (decl or (not product[n]))
-  #       consistency = consistency and tmp
-  #       if(not tmp):
-  #         raise ValueError(f"ERROR: the feature {n} is activated while the parent feature {self.m_name} is not")
-
-  #   consistency = consistency and (res == decl) and (ctc or not decl)
-
-  #   if(decl):
-  #     for att, spec in self.m_attributes:
-  #       tmp = spec(product[att])
-  #       consistency = consistency and tmp
-  #   else:
-  #     for att, spec in self.m_attributes:
-  #       tmp = (att not in product)
-  #       consistency = consistency and tmp
-
-
-  #   if not consistency:
-  #     raise ValueError(f"SPL configuration error self.m_name : {self.m_name}")
-
-  #   return (consistency, decl)
-
-  def _remove_subtree_from_product__(self, product):
-    if(product[self.m_name]):
-      product[self.m_name] = False
-    for att, spec in self.m_attributes:
-      # product[att] = None
-      product.pop(att)
-    for group in self.m_groups:
-      group._remove_subtree_from_product__(product)
-
-  def __call__(self, product):
-    return self._eval__(product)
-    # return tmp[0] and tmp[1]
-
-  def combine_product(self, default, update, res=None):
-    if(res is None):
-      res = {}
-    val = update.get(self.m_name, default[self.m_name])
-    res[self.m_name] = val
-    if(val): # the subtree needs to be included in res
-      for att, spec in self.m_attributes:
-        res[att] = update.get(att, default[att])
-      for group in self.m_groups:
-        group.combine_product(default, update, res)
-    return res
-
-  def make_product(self, conf, value=None, res=None):
-    if(res is None):
-      res = {}
-    # 1 compute a value for self
-    set_conf = (self.get_name() in conf)
-    set_value = (value is not None)
-    if(set_conf and set_value):
-      assert(conf[self.get_name()] == value)
-    elif(set_conf):
-      value = conf[self.get_name()]
-
-    sub_values = (group.make_product(conf, value, res) for group in self.m_groups)
-    if(self.m_groups):
-      group = self.m_groups[0]
-      if(value is None):
-        value = group.make_product(conf, value, res)
-      elif(value):
-        assert(group.make_product(conf, value, res))
-      else:
-        group._ensure_false__(self.get_name(), res)
-    elif(value is None):
-      value = False
-
-    res[self.get_name()] = value
-
-    # 2. ensure consistency with attributes
-    if(value):
-      for att, spec in self.m_attributes:
-        assert(att in conf)
-        res[att] = conf[att]
-    else:
-      for att, spec in self.m_attributes:
-        assert(att not in conf)
-
-    # 3. propagate and ensure consistency with other subtrees
-    if(value):
-      for group in self.m_groups[1:]:
-        assert(group.make_product(conf, value, res))
-    else:
-      for group in self.m_groups[1:]:
-        group.make_product(conf, value, res)
-        group._ensure_false__(self.get_name(), res)
-
-    return res
+def FD(*args, **kwargs):
+  if((len(args) == 1) and (isinstance(args[0], str))):
+    return FDLeaf(args[0], **kwargs)
+  else:
+    return FDAnd(*args, **kwargs)
 

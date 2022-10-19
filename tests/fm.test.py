@@ -192,28 +192,102 @@ def test_simple_attribute():
 #   print(f" reason: {res.m_reason}")
 
 def test_simple_fm():
-  val_1 = "val_1"
-  val_2 = "val_2"
-  val_3 = "val_3"
+  # 1. check declarations
+  fm_01 = FD('A',
+    FDAnd('B', FDXor(FD('B0'), FD('B1')), FDXor(FD('B2'), FD('B3'))),
+    FDAny('C', FD('C0'), FD('C1')),
+    FDOr('D', FD('D0'), FD('D1')),
+    FDXor('E', FD('E0'), FD('E1')),
+    Implies(And('B/B0', 'C/C0'), 'D/D0'),
+    Implies(And('B/B1', 'C/C0'), Eq('E',1)),
+    F=Int(1,3)
+  )
 
-  f_1 = "f_1"
-  f_2 = "f_2"
-  f_3 = "f_3"
-  f_4 = "f_4"
+  fm_02 = FD('A',
+    FDAnd('B', FDXor(FD('B0'), FD('B1')), FDXor(FD('B2'), FD('B3'))),
+    FDAny('C', FD('C0'), FD('C1')),
+    FDOr('D', FD('D0'), FD('D1')),
+    FDXor('E', FD('E0'), FD('E1')),
+    Implies(And('B0', 'C0'), 'D0'),
+    Implies(And('B1', 'C0'), Eq('E',1)),
+    F=Int(1,3)
+  )
 
-  fm_1 = FDAnd(f_1, FDAnd(f_2, Or(f_2, Not(f_2))), FDAnd(f_3), Lt(val_1, val_2), val_1=Int(), val_2=Int(0, 9))
-  errors = fm_1.generate_lookup()
-  print("========")
-  print(fm_1.m_lookup)
-  print("========")
-  print(errors)
+  # a path cannot contain twice the same name
+  fm_03 = FDXor('Z',
+    FD('P01', fm_01),
+    FD('P02', fm_02),
+  )
 
-  p_1 = {f_1: True, f_2: False, f_3: True, val_1: 1, val_2: 10}
-  p1, errors = fm_1.nf_product(p_1)
-  print(f" errors: {errors}")
-  res = fm_1(p1)
-  print(f" value: {res.m_value}")
-  print(f" reason: {res.m_reason}")
+  errors_01 = fm_01.generate_lookup()
+  if(bool(errors_01)):
+    print("ERROR 01")
+    print(errors_01)
+
+  errors_02 = fm_02.generate_lookup()
+  if(bool(errors_02)):
+    print("ERROR 02")
+    print(errors_02)
+
+
+  errors_03 = fm_03.generate_lookup()
+  if(bool(errors_03)):
+    print("ERROR 03")
+    print(errors_03)
+
+  conf_01 = {
+    'A' : True,
+    'B' : True,
+    'B0': True,
+    'B1': False,
+    'B2': True,
+    'B3': False,
+    'C' : True,
+    'C0': True,
+    'C1': True,
+    'D' : True,
+    'D0': True,
+    'D1': True,
+    'E' : True,
+    'E0': True,
+    'E1': False,
+    'F': 2
+  }
+
+  p_01, errors_01 = fm_01.nf_product(conf_01)
+  if(bool(errors_01)):
+    print("errors_01: product")
+    print(errors_01)
+  else:
+    value_01 = fm_01(p_01)
+    if(not bool(value_01)):
+      print(f" value: {value_01.m_value}")
+      print(f" reason: {value_01.m_reason}")
+      print(f" nvalue: {value_01.m_nvalue}")
+      print(f" snodes: {value_01.m_snodes}")
+
+  # val_1 = "val_1"
+  # val_2 = "val_2"
+  # val_3 = "val_3"
+
+  # f_1 = "f_1"
+  # f_2 = "f_2"
+  # f_3 = "f_3"
+  # f_4 = "f_4"
+
+  # fm_1 = FDAnd(f_1, FDAnd(f_2, Or(f_2, Not(f_2))), FDAnd(f_3), Lt(val_1, val_2), val_1=Int(), val_2=Int(0, 9))
+  # errors = fm_1.generate_lookup()
+  # print("========")
+  # print(fm_1.m_lookup)
+  # print("========")
+  # print(errors)
+
+  # p_1 = {f_1: True, f_2: False, f_3: True, val_1: 1, val_2: 10}
+  # p1, errors = fm_1.nf_product(p_1)
+  # print(f" errors: {errors}")
+  # res = fm_1(p1)
+  # print(f" value: {res.m_value}")
+  # print(f" reason: {res.m_reason}")
 
 
 if(__name__ == "__main__"):
