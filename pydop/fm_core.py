@@ -24,6 +24,11 @@
 _empty__ = object()
 _forward__ = object()
 
+
+##########################################
+# Default class for products
+# wrapper around a dict for getting values
+
 class product_default(object):
   __slots__ = ("m_content",)
   def __init__(self, content):
@@ -32,6 +37,11 @@ class product_default(object):
     if(default is _forward__):
       default = el
     return self.m_content.get(el, default)
+
+
+##########################################
+# Default evaluation function
+# DEPRECATED: replaced by product_default:get
 
 def pred_eval(el, product, idx=None, expected=True):
   res = None
@@ -48,6 +58,9 @@ def pred_eval(el, product, idx=None, expected=True):
   #   raise ValueError(f"ERROR: predicate evaluation must return a boolean (found {type(res)} while evaluating {el})")
 
 
+##########################################
+# Translates common prodct representations
+# into dict
 
 def make_configuration(data):
   if(isinstance(data, dict)):
@@ -64,3 +77,17 @@ def make_configuration(data):
   else:
     raise TypeError(f"ERROR unexpected configuration type (expected: dict/set/tuple/list; found {type(configuration)}")
   return res
+
+
+##########################################
+# Util function to combine generators
+
+def gen_sequence(*args):
+  i = 0
+  l = len(args)
+  while(i < l):
+    yield from args[i]
+    i += 1
+
+
+

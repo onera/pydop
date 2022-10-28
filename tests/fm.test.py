@@ -200,40 +200,105 @@ def test_simple_fm():
     FDXor('E', FD('E0'), FD('E1')),
     Implies(And('B/B0', 'C/C0'), 'D/D0'),
     Implies(And('B/B1', 'C/C0'), Eq('E',1)),
-    F=Int(1,3)
+    F=Bool()
   )
 
-  fm_02 = FD('A',
-    FDAnd('B', FDXor(FD('B0'), FD('B1')), FDXor(FD('B2'), FD('B3'))),
-    FDAny('C', FD('C0'), FD('C1')),
-    FDOr('D', FD('D0'), FD('D1')),
-    FDXor('E', FD('E0'), FD('E1')),
-    Implies(And('B0', 'C0'), 'D0'),
-    Implies(And('B1', 'C0'), Eq('E',1)),
-    F=Int(1,3)
-  )
+  # fm_02 = FD('A',
+  #   FDAnd('B', FDXor(FD('B0'), FD('B1')), FDXor(FD('B2'), FD('B3'))),
+  #   FDAny('C', FD('C0'), FD('C1')),
+  #   FDOr('D', FD('D0'), FD('D1')),
+  #   FDXor('E', FD('E0'), FD('E1')),
+  #   Implies(And('B0', 'C0'), 'D0'),
+  #   Implies(And('B1', 'C0'), Eq('E',1)),
+  #   F=Int(1,3)
+  # )
 
-  # a path cannot contain twice the same name
-  fm_03 = FDXor('Z',
-    FD('P01', fm_01),
-    FD('P02', fm_02),
-  )
+  # # a path cannot contain twice the same name
+  # fm_03 = FDXor('Z',
+  #   FD('P01', fm_01),
+  #   FD('P02', fm_02),
+  # )
+
+  ##########################################
+  # 1. first checks on the FD consistency
 
   errors_01 = fm_01.generate_lookup()
   if(bool(errors_01)):
     print("ERROR 01")
     print(errors_01)
 
-  errors_02 = fm_02.generate_lookup()
-  if(bool(errors_02)):
-    print("ERROR 02")
-    print(errors_02)
+  # errors_02 = fm_02.generate_lookup()
+  # if(bool(errors_02)):
+  #   print("ERROR 02")
+  #   print(errors_02)
 
 
-  errors_03 = fm_03.generate_lookup()
-  if(bool(errors_03)):
-    print("ERROR 03")
-    print(errors_03)
+  # errors_03 = fm_03.generate_lookup()
+  # if(bool(errors_03)):
+  #   print("ERROR 03")
+  #   print(errors_03)
+
+
+  ##########################################
+  # 2. check configuration for fm_01
+
+  paths = {
+    'A' : ('A',),
+    'B' : ('A/B', 'B'),
+    'B0': ('A/B/B0', 'A/B0', 'B/B0', 'B0'),
+    'B1': ('A/B/B1', 'A/B1', 'B/B1', 'B1'),
+    'B2': ('A/B/B2', 'A/B2', 'B/B2', 'B2'),
+    'B3': ('A/B/B3', 'A/B3', 'B/B3', 'B3'),
+    'C' : ('A/C', 'C'),
+    'C0': ('A/C/C0', 'A/C0', 'C/C0', 'C0'),
+    'C1': ('A/C/C1', 'A/C1', 'C/C1', 'C1'),
+    'D' : ('A/D', 'D'),
+    'D0': ('A/D/D0', 'A/D0', 'D/D0', 'D0'),
+    'D1': ('A/D/D1', 'A/D1', 'D/D1', 'D1'),
+    'E' : ('A/E', 'E'),
+    'E0': ('A/E/E0', 'A/E0', 'E/E0', 'E0'),
+    'E1': ('A/E/E1', 'A/E1', 'E/E1', 'E1'),
+    'F': ('A/F', 'F'),
+  }
+
+  paths = tuple(paths.values())
+
+  def conf_bool_generator(arg):
+    if(len(arg) == 1):
+      yield (True,)
+      yield (False,)
+    else:
+      for sub in conf_bool_generator(arg[1:]):
+        yield (True,) + sub
+        yield (False,) + sub
+
+  def conf_traversal(arg):
+    if(len(arg) == 1):
+      for el in arg[0]: yield (el,)
+    else:
+      for sub in conf_traversal(arg[1:]):
+        for el in arg[0]: yield (el,) + sub
+
+  for conf in zip(conf_traversal(paths), conf_bool_generator(paths)):
+    prod = {}
+    for el, value in zip(*conf):
+      prod[el] = value
+
+    p_00, errors_00 = fm_01.nf_product(prod)
+
+    if(bool(errors_00)):
+      print("errors_00: product")
+      print(errors_00)
+    else:
+      value_00 = fm_01(p_00)
+      if(not bool(value_00)):
+        print(f" product: {prod}")
+        print(f" value: {value_00.m_value}")
+        print(f" reason: {value_00.m_reason}")
+        print(f" nvalue: {value_00.m_nvalue}")
+        # print(f" snodes: {value_00.m_snodes}")
+
+  return
 
   conf_01 = {
     'A' : True,
@@ -265,6 +330,54 @@ def test_simple_fm():
       print(f" reason: {value_01.m_reason}")
       print(f" nvalue: {value_01.m_nvalue}")
       print(f" snodes: {value_01.m_snodes}")
+
+
+  print("==========================================")
+
+
+  conf_02 = {
+    'A' : True,
+    'B' : True,
+    'B0': True,
+    'B1': False,
+    'B2': True,
+    'B3': False,
+    'C' : True,
+    'C0': False,
+    'C1': False,
+    'D' : True,
+    'D0': True,
+    'D1': True,
+    'E' : True,
+    'E0': True,
+    'E1': False,
+    'F': 2
+  }
+
+  p_02, errors_02 = fm_01.nf_product(conf_02)
+  if(bool(errors_02)):
+    print("errors_02: product")
+    print(errors_02)
+  else:
+    value_02 = fm_01(p_02)
+    if(not bool(value_02)):
+      print(f" value: {value_02.m_value}")
+      print(f" reason: {value_02.m_reason}")
+      print(f" nvalue: {value_02.m_nvalue}")
+      print(f" snodes: {value_02.m_snodes}")
+
+
+
+
+  fm_04 = FDXor('Z',
+    FD('P01', fm_01),
+    FD('P02', fm_01),
+  )
+
+  errors_04 = fm_04.generate_lookup()
+  if(bool(errors_04)):
+    print("ERROR 04")
+    print(errors_04)
 
   # val_1 = "val_1"
   # val_2 = "val_2"

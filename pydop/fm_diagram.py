@@ -20,7 +20,7 @@
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
-from pydop.fm_core import pred_eval, _empty__
+from pydop.fm_core import pred_eval, _empty__, gen_sequence
 
 
 import enum
@@ -669,7 +669,7 @@ class _fdgroup__c(object):
   def _eval_generic__(self, product, f_get, expected=True):
     # print(f"_eval_generic__([{self.__class__.__name__}]{self.m_path}, {product}, {f_get}, {expected})")
     # print(f"_eval_generic__([{self.__class__.__name__}]{_path_to_str__(self.m_path)})")
-    print(f"_eval_generic__({_path_to_str__(self.m_path)})")
+    # print(f"_eval_generic__({_path_to_str__(self.m_path)})")
     expected_att = (_empty__ if(expected is False) else expected)
 
     results_content = tuple(f_get(el, product, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
@@ -683,11 +683,13 @@ class _fdgroup__c(object):
     # print(f"   reasons = {', '.join(str(el.m_reason) for el in result_ctc)}")
 
 
-    values = tuple(el.m_value for resu in (results_content, result_att, result_ctc) for el in resu)
-    nvalue = product.get(self, _empty__)
-    print(f"  => compute {values}, {nvalue}")
-    res = self._compute__(values, nvalue)
-    print(f"  => res = {res}")
+    nvalue_subs  = tuple(gen_sequence((el.m_nvalue for el in results_content), (el.m_value for resu in (result_att, result_ctc) for el in resu)))
+    # nvalue_local = product.get(self, _empty__)
+    nvalue_local = None
+    # print(f"  => compute {nvalue_subs}, {nvalue_local}")
+    nvalue_sub = self._compute__(nvalue_subs, nvalue_local)
+    # print(f"  => nvalue_sub = {nvalue_sub}")
+    value_subs = all(el.m_value for el in results_content)
     snodes = tuple(v for el in results_content for v in el.m_snodes)
 
     # print(f" => computed res: {res}")
@@ -695,31 +697,37 @@ class _fdgroup__c(object):
     # check consistency with name
     reason = None
     if(self.m_name is not None):
-      # nvalue = product.get(self, _empty__)
-      if(nvalue is _empty__):
+      nvalue_local = product.get(self, _empty__)
+      if(nvalue_local is _empty__):
         reason = f"Feature {_path_to_str__(self.m_path)} has no value in the input product"
-      elif((not nvalue) and snodes):
+      elif((not nvalue_local) and snodes):
         tmp = ', '.join(f"\"{_path_to_str__(el.m_path)}\"" for el in snodes)
         reason = f"Feature {_path_to_str__(self.m_path)} should be set to True due to validated subfeatures (found: {tmp})"
-      elif(nvalue and (not res)):
+      elif(nvalue_local and (not nvalue_sub)):
         reason = f"Feature {_path_to_str__(self.m_path)} is selected while its content is False"
-      elif(nvalue):
+      elif(nvalue_local):
         snodes = snodes + (self,)
     else:
-      nvalue = res
+      nvalue_local = nvalue_sub
 
-    value = all(el.m_value for el in results_content) and (reason is None)
+    value = value_subs and (reason is None)
+    # print(f"  => nvalue_local = {nvalue_local}")
+    # print(f"  => value = {value}")
 
     reasons = None
-    if((nvalue != expected) or (not value)):
+    if((nvalue_local != expected) or (not value)):
       reasons = []
       if(reason is not None): reasons.append(reason)
-      if((nvalue != expected)): reasons.append(f"Feature {_path_to_str__(self.m_path)} has value {nvalue} (expected {expected})")
+      if((nvalue_local != expected)):
+        if(expected is None):
+          reasons.append(f"Feature {_path_to_str__(self.m_path)} has value {nvalue_local}")
+        else:
+          reasons.append(f"Feature {_path_to_str__(self.m_path)} has value {nvalue_local} (expected {expected})")
       for el in (el for resu in (results_content, result_att, result_ctc) for el in resu):
         if(el.m_reason is not None): reasons.append(el.m_reason)
       reasons = _reason_tree__c(self.__class__.__name__, self.m_path, reasons)
 
-    return _eval_result_fd__c(value, reasons, nvalue, snodes)
+    return _eval_result_fd__c(value, reasons, nvalue_local, snodes)
 
   def _f_get_shallow__(self, product, expected=True):
     if(self.m_name is None):
@@ -848,6 +856,10 @@ class FDXor(_fdgroup__c):
   def _get_expected__(self, el, i, expected):
     return None
 
+
+
+
+
   def combine_product(self, default, update, res):
     has_update = False
     has_add = False
@@ -871,8 +883,11 @@ class FDXor(_fdgroup__c):
 
 
 def FD(*args, **kwargs):
-  if((len(args) == 1) and (isinstance(args[0], str))):
-    return FDLeaf(args[0], **kwargs)
-  else:
     return FDAnd(*args, **kwargs)
+
+# def FD(*args, **kwargs):
+#   if((len(args) == 1) and (isinstance(args[0], str))):
+#     return FDLeaf(args[0], **kwargs)
+#   else:
+#     return FDAnd(*args, **kwargs)
 
