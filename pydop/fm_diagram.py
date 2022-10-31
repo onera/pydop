@@ -20,7 +20,7 @@
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
-from pydop.fm_core import pred_eval, _empty__, gen_sequence
+from pydop.fm_core import pred_eval, _empty__, gen_sequence, dict_sequence
 
 
 import enum
@@ -764,13 +764,55 @@ class _fdgroup__c(object):
   ##########################################
   # Update product API
 
+  def make_product(self, product):
+    is_true_d = {}
+    self._must_be_true_rec(product, is_true_d)
+    res = {}
+    self._make_product_rec(is_true_d[self], product, is_true_d, res)
+    return res
+
+  def combine_product(self, default, update):
+    return self.make_product(dict_sequence(update, default))
 
 
+  def _must_be_true_rec(self, product, res):
+    # print(f"_must_be_true_rec({self}, {product}, {res})")
+    value = product.get(self, False)
+    for sub in self.m_content:
+      tmp = sub._must_be_true_rec(product, res)
+      value = value or tmp
+    res[self] = value
+    return value
 
-  def _ensure_false__(self, name_parent, product):
-    for element in self.m_content:
-      if(self.get_shallow(element,product)):
-        raise ValueError(f"ERROR: the feature {self.get_name(element)} is activated while the parent feature {name_parent} is not")
+  def _make_product_rec(self, value, product, is_true_d, res):
+    value = value or is_true_d[self]
+    if(self.m_name is not None):
+      res[self] = value
+    for sub, sub_value in zip(self.m_content, self._infer_sv__(value, is_true_d)):
+      sub._make_product_rec(sub_value, product, is_true_d, res)
+    for att_def in self.m_attributes:
+      v = product.get(att_def, _empty__)
+      if(v is not _empty__):
+        res[att_def] = v
+
+
+  ##########################################
+  # print for error report
+
+  def __str__(self):
+    if(self.m_path is None):
+      return object.__str__(self)
+    else:
+      return _path_to_str__(self.m_path)
+
+  def __repr__(self): return str(self)
+  
+
+
+  # def _ensure_false__(self, name_parent, product):
+  #   for element in self.m_content:
+  #     if(self.get_shallow(element,product)):
+  #       raise ValueError(f"ERROR: the feature {self.get_name(element)} is activated while the parent feature {name_parent} is not")
 
   # @property
   # def sub_features(self):
@@ -796,28 +838,28 @@ class _fdgroup__c(object):
   #   elif(isinstance(element, str)): return element
   #   else: return element
 
-  def _remove_subtree_from_product__(self, product):
-    for element in self.m_content:
-      element._remove_subtree_from_product__(product)
+  # def _remove_subtree_from_product__(self, product):
+  #   for element in self.m_content:
+  #     element._remove_subtree_from_product__(product)
 
-  def combine_product(self, default, update, res):
-    for element in self.m_content:
-      element.combine_product(default, update, res)
+  # def combine_product(self, default, update, res):
+  #   for element in self.m_content:
+  #     element.combine_product(default, update, res)
 
-  def make_product(self, conf, value, res):
-    for element in self.m_content:
-      element.make_product(conf, value, res)
-    return self.get_shallow(res)
+  # def make_product(self, conf, value, res):
+  #   for element in self.m_content:
+  #     element.make_product(conf, value, res)
+  #   return self.get_shallow(res)
 
 
-class FDLeaf(_fdgroup__c):
-  def __init__(self, name, **kwargs):
-    assert(isinstance(name, str))
-    _fdgroup__c.__init__(self, name, **kwargs)
-  def _compute__(self, values, nvalue):
-    return nvalue
-  def _get_expected__(self, el, i, expected):
-    return None
+# class FDLeaf(_fdgroup__c):
+#   def __init__(self, name, **kwargs):
+#     assert(isinstance(name, str))
+#     _fdgroup__c.__init__(self, name, **kwargs)
+#   def _compute__(self, values, nvalue):
+#     return nvalue
+#   def _get_expected__(self, el, i, expected):
+#     return None
 
 class FDAnd(_fdgroup__c):
   def __init__(self, *args, **kwargs):
@@ -826,6 +868,13 @@ class FDAnd(_fdgroup__c):
     return all(values)
   def _get_expected__(self, el, i, expected):
     return (True if(expected) else None)
+  def _infer_sv__(self, value, is_true_d):
+    if(value):
+      for _ in self.m_content:
+        yield True
+    else:
+      for _ in self.m_content:
+        yield False
 
 class FDAny(_fdgroup__c):
   def __init__(self, *args, **kwargs):
@@ -834,6 +883,9 @@ class FDAny(_fdgroup__c):
     return True
   def _get_expected__(self, el, i, expected):
     return None
+  def _infer_sv__(self, value, is_true_d):
+    for _ in self.m_content:
+      yield False
 
 class FDOr(_fdgroup__c):
   def __init__(self, *args, **kwargs):
@@ -842,6 +894,9 @@ class FDOr(_fdgroup__c):
     return any(values)
   def _get_expected__(self, el, i, expected):
     return (False if(not expected) else None)
+  def _infer_sv__(self, value, is_true_d):
+    for _ in self.m_content:
+      yield False
 
 class FDXor(_fdgroup__c):
   def __init__(self, *args, **kwargs):
@@ -855,35 +910,40 @@ class FDXor(_fdgroup__c):
     return res
   def _get_expected__(self, el, i, expected):
     return None
+  def _infer_sv__(self, value, is_true_d):
+    for _ in self.m_content:
+      yield False
 
 
 
 
 
-  def combine_product(self, default, update, res):
-    has_update = False
-    has_add = False
-    for element in self.m_content:
-      val = update.get(element.m_name)
-      if(val is not None): has_update = True
-      if(val == True): has_add = True
-    if(has_update):
-      if(has_add):
-        def _manage_el__(element):
-          if(update.get(element.m_name, False)):
-            element.combine_product(default, update, res)
-      else:
-        def _manage_el__(element):
-          if(default[element.m_name] and update.get(element.m_name, True)):
-            element.combine_product(default, update, res)
-      for element in self.m_content:
-        _manage_el__(element)
-    else:
-      _fdgroup__c.combine_product(self, default, update, res)
+  # def combine_product(self, default, update, res):
+  #   has_update = False
+  #   has_add = False
+  #   for element in self.m_content:
+  #     val = update.get(element.m_name)
+  #     if(val is not None): has_update = True
+  #     if(val == True): has_add = True
+  #   if(has_update):
+  #     if(has_add):
+  #       def _manage_el__(element):
+  #         if(update.get(element.m_name, False)):
+  #           element.combine_product(default, update, res)
+  #     else:
+  #       def _manage_el__(element):
+  #         if(default[element.m_name] and update.get(element.m_name, True)):
+  #           element.combine_product(default, update, res)
+  #     for element in self.m_content:
+  #       _manage_el__(element)
+  #   else:
+  #     _fdgroup__c.combine_product(self, default, update, res)
 
 
-def FD(*args, **kwargs):
-    return FDAnd(*args, **kwargs)
+class FD(FDAnd): pass
+
+# def FD(*args, **kwargs):
+#     return FDAnd(*args, **kwargs)
 
 # def FD(*args, **kwargs):
 #   if((len(args) == 1) and (isinstance(args[0], str))):

@@ -403,8 +403,53 @@ def test_simple_fm():
   # print(f" reason: {res.m_reason}")
 
 
+
+def test_fm_make_product():
+  # 1. check declarations
+  fm_01 = FD('A',
+    FDAnd('B', FDXor(FD('B0'), FD('B1')), FDXor(FD('B2'), FD('B3'))),
+    FDAny('C', FD('C0'), FD('C1')),
+    FDOr('D', FD('D0'), FD('D1')),
+    FDXor('E', FD('E0'), FD('E1')),
+    Implies(And('B/B0', 'C/C0'), 'D/D0'),
+    Implies(And('B/B1', 'C/C0'), Eq('E',1)),
+    F=Bool()
+  )
+
+  errors_01 = fm_01.generate_lookup()
+  if(bool(errors_01)):
+    print("ERROR 01")
+    print(errors_01)
+  else:
+    conf_00 = { 'E1': True }
+    # conf_00 = {}
+    conf_10 = { 'B1': True, 'B3': True, 'D1': True, 'F': False }
+    conf_01, errors_02 = fm_01.nf_product(conf_00)
+    conf_11, errors_12 = fm_01.nf_product(conf_10)
+    if(bool(errors_02)):
+      print("errors_02: product")
+      print(errors_02)
+    elif(bool(errors_12)):
+      print("errors_12: product")
+      print(errors_12)
+    else:
+      conf_02 = fm_01.make_product(conf_01)
+      # print(conf_02)
+      conf_03 = fm_01.combine_product(conf_01, conf_11)
+      print(conf_03)
+
+      # value_02 = fm_01(conf_02)
+      value_02 = fm_01(conf_03)
+      if(not bool(value_02)):
+        print(f" value: {value_02.m_value}")
+        print(f" reason: {value_02.m_reason}")
+        print(f" nvalue: {value_02.m_nvalue}")
+        print(f" snodes: {value_02.m_snodes}")
+
+
 if(__name__ == "__main__"):
   test_simple_constraint()
   test_simple_attribute()
   # test_test()
-  test_simple_fm()
+  # test_simple_fm()
+  test_fm_make_product()

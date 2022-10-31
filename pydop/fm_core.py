@@ -91,3 +91,15 @@ def gen_sequence(*args):
 
 
 
+class dict_sequence(object):
+  __slots__ = ("m_content")
+  def __init__(self, *args):
+    self.m_content = tuple(args)
+
+  def get(self, key, default=None):
+    for sub in self.m_content:
+      res = sub.get(key, _empty__)
+      if(res is not _empty__):
+        return res
+    return default
+
