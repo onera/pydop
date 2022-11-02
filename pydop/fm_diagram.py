@@ -764,36 +764,115 @@ class _fdgroup__c(object):
   ##########################################
   # Update product API
 
-  def make_product(self, product):
+  # def make_product(self, product):
+  #   is_true_d = {}
+  #   self._must_be_true_rec(product, is_true_d)
+  #   res = {}
+  #   self._make_product_rec(is_true_d[self], product, is_true_d, res)
+  #   return res
+
+  # def combine_product(self, default, update):
+  #   return self.make_product(dict_sequence(update, default))
+
+
+  # def _must_be_true_rec(self, product, res):
+  #   # print(f"_must_be_true_rec({self}, {product}, {res})")
+  #   value = product.get(self, False)
+  #   for sub in self.m_content:
+  #     tmp = sub._must_be_true_rec(product, res)
+  #     value = value or tmp
+  #   res[self] = value
+  #   return value
+
+  # def _make_product_rec(self, value, product, is_true_d, res):
+  #   value = value or is_true_d[self]
+  #   if(self.m_name is not None):
+  #     res[self] = value
+  #   for sub, sub_value in zip(self.m_content, self._infer_sv__(value, is_true_d)):
+  #     sub._make_product_rec(sub_value, product, is_true_d, res)
+  #   for att_def in self.m_attributes:
+  #     v = product.get(att_def, _empty__)
+  #     if(v is not _empty__):
+  #       res[att_def] = v
+
+
+  def make_product(self, *args): # TODO: need to add inconsistency checking (with error list, like always, filled by _infer_sv__)
     is_true_d = {}
-    self._must_be_true_rec(product, is_true_d)
+    for i, p in enumerate(args):
+      for k, v in p.items():
+        is_true_d[k] = (v, i)
+    self._make_product_rec_1(is_true_d)
+    # print("=====================================")
+    # print("is_true_d")
+    # print(is_true_d)
+    # print("=====================================")
     res = {}
-    self._make_product_rec(is_true_d[self], product, is_true_d, res)
+    v_local = is_true_d.get(self, _empty__)
+    if(v_local is _empty__):
+      self._make_product_rec_2(False, is_true_d, res)
+    else:
+      self._make_product_rec_2(v_local[0], is_true_d, res)
     return res
 
-  def combine_product(self, default, update):
-    return self.make_product(dict_sequence(update, default))
-
-
-  def _must_be_true_rec(self, product, res):
-    # print(f"_must_be_true_rec({self}, {product}, {res})")
-    value = product.get(self, False)
+  def _make_product_rec_1(self, is_true_d):
+    idx, v_local, v_subs = self._infer_sv__(is_true_d)
+    self._make_product_update__(is_true_d, idx, v_local, v_subs)
     for sub in self.m_content:
-      tmp = sub._must_be_true_rec(product, res)
-      value = value or tmp
-    res[self] = value
-    return value
+      sub._make_product_rec_1(is_true_d)
+    idx, v_local, v_subs = self._infer_sv__(is_true_d)
+    self._make_product_update__(is_true_d, idx, v_local, v_subs)
 
-  def _make_product_rec(self, value, product, is_true_d, res):
-    value = value or is_true_d[self]
-    if(self.m_name is not None):
-      res[self] = value
-    for sub, sub_value in zip(self.m_content, self._infer_sv__(value, is_true_d)):
-      sub._make_product_rec(sub_value, product, is_true_d, res)
-    for att_def in self.m_attributes:
-      v = product.get(att_def, _empty__)
-      if(v is not _empty__):
-        res[att_def] = v
+
+  def _make_product_extract_utils__(self, is_true_d, expected=True):
+    idx = -1
+    def f(val):
+      nonlocal idx
+      if(val is _empty__): 
+        return val
+      else:
+        if((val[0] == expected) and (val[1] > idx)):
+          idx = val[1]
+        return val[0]
+    v_subs = tuple(f(is_true_d.get(sub, _empty__)) for sub in self.m_content)
+    return idx, v_subs
+
+  # def _make_product_extract__(self, is_true_d):
+  #   v_local = is_true_d.get(self, _empty__)
+  #   v_subs = tuple(is_true_d.get(sub, _empty__) for sub in self.m_content)
+  #   idx = -1 if(v_local is _empty__) else v_local[1]
+  #   for v_sub in v_subs:
+  #     if((v_sub is not _empty__) and (v_sub[1] > idx)):
+  #       idx = v_sub[1]
+
+  #   v_local = (v_local[0] if((v_local is not _empty__) and (v_local[1] == idx)) else _empty__)
+  #   v_subs = tuple((v_sub[0] if((v_sub is not _empty__) and (v_sub[1] == idx)) else _empty__) for v_sub in v_subs)
+  #   return idx, v_local, v_subs
+
+  def _make_product_update__(self, is_true_d, idx, v_local, v_subs):
+    if(v_local is not _empty__):
+      is_true_d[self] = (v_local, idx)
+    for sub, v_sub in zip(self.m_content, v_subs):
+      if(v_sub is not _empty__):
+        is_true_d[sub] = (v_sub, idx)
+
+  def _make_product_rec_2(self, v_local, is_true_d, res):
+    # _, _, v_subs = self._make_product_extract__(is_true_d)
+    # print(f"  {self} :subs[0] => {v_subs}")
+    _, _, v_subs = self._infer_sv__(is_true_d)
+    # print(f"  {self} :subs[1] => {v_subs}")
+    res[self] = v_local
+    for sub, v_sub in zip(self.m_content, v_subs):
+      if(v_sub is _empty__):
+        sub._make_product_rec_2(False, is_true_d, res)
+      else:
+        sub._make_product_rec_2(v_sub, is_true_d, res)
+    # if feature selected, need to include the attribute 
+    if(v_local):
+      for att_def in self.m_attributes:
+        v = is_true_d.get(att_def, _empty__)
+        if(v is not _empty__):
+          res[att_def] = v[0]
+
 
 
   ##########################################
@@ -868,13 +947,22 @@ class FDAnd(_fdgroup__c):
     return all(values)
   def _get_expected__(self, el, i, expected):
     return (True if(expected) else None)
-  def _infer_sv__(self, value, is_true_d):
-    if(value):
-      for _ in self.m_content:
-        yield True
-    else:
-      for _ in self.m_content:
-        yield False
+  # def _infer_sv__(self, value, is_true_d):
+  #   if(value):
+  #     for _ in self.m_content:
+  #       yield True
+  #   else:
+  #     for _ in self.m_content:
+  #       yield False
+  def _infer_sv__(self, is_true_d):
+    value = (_empty__, -1)
+    for el in gen_sequence((self,), self.m_content):
+      val = is_true_d.get(el, _empty__)
+      if((val is not _empty__) and (val[1] > value[1])):
+        value = val
+    
+    return value[1], value[0], tuple(value[0] for sub in self.m_content)
+
 
 class FDAny(_fdgroup__c):
   def __init__(self, *args, **kwargs):
@@ -883,9 +971,18 @@ class FDAny(_fdgroup__c):
     return True
   def _get_expected__(self, el, i, expected):
     return None
-  def _infer_sv__(self, value, is_true_d):
-    for _ in self.m_content:
-      yield False
+  # def _infer_sv__(self, value, is_true_d):
+  #   for _ in self.m_content:
+  #     yield False
+  def _infer_sv__(self, is_true_d):
+    # tuple((is_true_d.get(sub, (_empty__, -1))[0]) for sub in self.m_content)
+    idx_subs, v_subs = self._make_product_extract_utils__(is_true_d)
+    v_local, idx_local = is_true_d.get(self, (False, -1))
+    if(idx_subs > idx_local):
+      idx_local = idx_subs
+      v_local = True
+    return idx_local, v_local, v_subs
+
 
 class FDOr(_fdgroup__c):
   def __init__(self, *args, **kwargs):
@@ -894,9 +991,17 @@ class FDOr(_fdgroup__c):
     return any(values)
   def _get_expected__(self, el, i, expected):
     return (False if(not expected) else None)
-  def _infer_sv__(self, value, is_true_d):
-    for _ in self.m_content:
-      yield False
+  # def _infer_sv__(self, value, is_true_d):
+  #   for _ in self.m_content:
+  #     yield False
+  def _infer_sv__(self, is_true_d):
+    # tuple((is_true_d.get(sub, (_empty__, -1))[0]) for sub in self.m_content)
+    idx_subs, v_subs = self._make_product_extract_utils__(is_true_d)
+    v_local, idx_local = is_true_d.get(self, (False, -1))
+    if(idx_subs > idx_local):
+      idx_local = idx_subs
+      v_local = True
+    return idx_local, v_local, v_subs
 
 class FDXor(_fdgroup__c):
   def __init__(self, *args, **kwargs):
@@ -910,9 +1015,18 @@ class FDXor(_fdgroup__c):
     return res
   def _get_expected__(self, el, i, expected):
     return None
-  def _infer_sv__(self, value, is_true_d):
-    for _ in self.m_content:
-      yield False
+  # def _infer_sv__(self, value, is_true_d):
+  #   for _ in self.m_content:
+  #     yield False
+  def _infer_sv__(self, is_true_d):
+    idx_subs, v_subs = self._make_product_extract_utils__(is_true_d)
+    v_local, idx_local = is_true_d.get(self, (False, -1))
+    if(idx_subs > idx_local):
+      idx_local = idx_subs
+      v_local = True
+    if(idx_subs > -1):
+      v_subs = tuple((is_true_d.get(sub, (False, -1)) == (True, idx_subs)) for sub in self.m_content)
+    return idx_local, v_local, v_subs
 
 
 

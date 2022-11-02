@@ -20,8 +20,11 @@
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
+class _empty_c__(object):
+  def __str__(self): return "_empty__"
+  def __repr__(self): return "_empty__"
 
-_empty__ = object()
+_empty__ = _empty_c__()
 _forward__ = object()
 
 
