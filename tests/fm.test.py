@@ -21,10 +21,14 @@
 
 # from pydop.fm_core import product_default
 from pydop.fm_diagram import *
-import enum
 
+import enum
+import itertools
 
 def test_simple_constraint():
+  print("==========================================")
+  print("= test_simple_constraint")
+
   val_1 = "val_1"
   val_2 = "val_2"
   val_3 = "val_3"
@@ -110,6 +114,9 @@ def test_simple_constraint():
 
 
 def test_simple_attribute():
+  print("==========================================")
+  print("= test_simple_attribute")
+
   class tmp_1(object): pass
   class tmp_2(enum.Enum):
     TMP_20 = 0
@@ -173,74 +180,305 @@ def test_simple_attribute():
     #   # print(f" reason: {res.m_reason}")
 
 
-# def test_test():
-#   val_1 = "val_1"
-#   val_2 = "val_2"
-#   val_3 = "val_3"
-#   val_4 = "val_4"
 
-#   constraint_01 = Lt (val_1, val_2)
-#   constraint_02 = Leq(val_2, val_3)
-#   constraint_03 = Eq (val_3, val_4)
 
-#   constraint_06 = And(constraint_01, constraint_02, constraint_03)
-#   constraint_08 = Not(constraint_06)
-#   constraint_07 = Or(constraint_01, constraint_02, constraint_06)
+def test_fm_values():
+  print("==========================================")
+  print("= test_fm_values")
 
-#   res = constraint_07({ val_1: 0, val_2: 0, val_3: 0, val_4: 0 })
-#   print(f" value: {res.m_value}")
-#   print(f" reason: {res.m_reason}")
-
-def test_simple_fm():
-  # 1. check declarations
   fm_01 = FD('A',
     FDAnd('B', FDXor(FD('B0'), FD('B1')), FDXor(FD('B2'), FD('B3'))),
     FDAny('C', FD('C0'), FD('C1')),
     FDOr('D', FD('D0'), FD('D1')),
     FDXor('E', FD('E0'), FD('E1')),
-    Implies(And('B/B0', 'C/C0'), 'D/D0'),
-    Implies(And('B/B1', 'C/C0'), Eq('E',1)),
-    F=Bool()
+    Implies(And('B/B0', 'C/C0'), Not('E1')),
+    # Implies(And('B/B1', 'C/C0'), Eq('E1',False)),
+    F=List(size=(1,4), spec=Int(3,5))
   )
 
-  # fm_02 = FD('A',
-  #   FDAnd('B', FDXor(FD('B0'), FD('B1')), FDXor(FD('B2'), FD('B3'))),
-  #   FDAny('C', FD('C0'), FD('C1')),
-  #   FDOr('D', FD('D0'), FD('D1')),
-  #   FDXor('E', FD('E0'), FD('E1')),
-  #   Implies(And('B0', 'C0'), 'D0'),
-  #   Implies(And('B1', 'C0'), Eq('E',1)),
-  #   F=Int(1,3)
-  # )
+  conf_empty = {
+    'A' : False,
+    'B' : False, 'B0': False, 'B1': False, 'B2': False, 'B3': False,
+    'C' : False, 'C0': False, 'C1': False,
+    'D' : False, 'D0': False, 'D1': False,
+    'E' : False, 'E0': False, 'E1': False,
+    'F':  False,
+  }
 
-  # # a path cannot contain twice the same name
-  # fm_03 = FDXor('Z',
-  #   FD('P01', fm_01),
-  #   FD('P02', fm_02),
-  # )
+  conf_base = {
+    'A' : True,
+    'B' : True, 'B0': True, 'B1': False, 'B2': True, 'B3': False,
+    'C' : True, 'C0': False, 'C1': False,
+    'D' : True, 'D0': True, 'D1': False,
+    'E' : True, 'E0': True, 'E1': False,
+    'F':  (3,),
+  }
 
-  ##########################################
-  # 1. first checks on the FD consistency
+  def update(**kwargs):
+    return dict([(k, v) for d in (conf_base, kwargs) for k,v in d.items()])
 
-  errors_01 = fm_01.generate_lookup()
-  if(bool(errors_01)):
-    print("ERROR 01")
-    print(errors_01)
+  tests = (
+    (conf_empty, True),
+    (conf_base,  True),
+    # B
+    (update(B0=False, B1=True), True),
+    (update(B2=False, B3=True), True),
+    (update(B0=False, B1=True, B2=False, B3=True), True),
+    (update(B0=True, B1=True), False),
+    (update(B2=True, B3=True), False),
+    # C
+    (update(C0=True), True),
+    (update(C1=True), True),
+    (update(C0=True, C1=True), True),
+    # D
+    (update(D1=True), True),
+    (update(D0=True, D1=True), True),
+    (update(D0=False, D1=True), True),
+    (update(D0=False), False),
+    # E
+    (update(E0=True), True),
+    (update(E0=False, E1=True), True),
+    (update(E0=False), False),
+    (update(E0=True, E1=True), False),
+    # F
+    (update(F=(3,4,)), True),
+    (update(F=(3,4,4)), True),
+    (update(F=()), False),
+    (update(F=(3,4,5)), False),
+    (update(F=(3,3,3,3)), False),
+    # Implies
+    (update(C0=True, E0=True), True),
+    (update(C0=True, E1=True), False),
+  )
 
-  # errors_02 = fm_02.generate_lookup()
-  # if(bool(errors_02)):
-  #   print("ERROR 02")
-  #   print(errors_02)
+  # 2. check FM
+  go_on = True
+  if(go_on):
+    errors = fm_01.generate_lookup()
+    if(bool(errors)):
+      print("ERROR generate_lookup")
+      print(errors)
+      go_on = False
+  
+  if(go_on):
+    for conf_raw, expected in tests:
+      conf, error = fm_01.nf_product(conf_raw)
+
+      if(bool(error)):
+        print(f"ERROR nf_product")
+        print(error)
+        go_on = False
+
+      if(go_on):
+        value = fm_01(conf)
+        if(bool(value) != expected):
+          print(f" value: {value.m_value}")
+          print(f" reason: {value.m_reason}")
+          print(f" nvalue: {value.m_nvalue}")
+          print(f" snodes: {value.m_snodes}")
 
 
-  # errors_03 = fm_03.generate_lookup()
-  # if(bool(errors_03)):
-  #   print("ERROR 03")
-  #   print(errors_03)
+
+def test_fm_path():
+  print("==========================================")
+  print("= test_fm_path")
+
+  fm_01 = FD('A',
+    FDAnd('B', FDXor(FD('B0'), FD('B1')), FDXor(FD('B2'), FD('B3'))),
+    FDAny('C', FD('C0'), FD('C1')),
+    FDOr('D', FD('D0'), FD('D1')),
+    FDXor('E', FD('E0'), FD('E1')),
+    Implies(And('B/B0', 'C/C0'), Not('E1')),
+    # Implies(And('B/B1', 'C/C0'), Eq('E1',False)),
+    F=List(size=(1,4), spec=Int(3,5))
+  )
+
+  conf_base = {
+    'A' : True,
+    'B' : True, 'B0': True, 'B1': False, 'B2': True, 'B3': False,
+    'C' : True, 'C0': False, 'C1': False,
+    'D' : True, 'D0': True, 'D1': False,
+    'E' : True, 'E0': True, 'E1': False,
+    'F':  (3,),
+  }
 
 
-  ##########################################
-  # 2. check configuration for fm_01
+  paths = {
+    'A' : ('A',),
+    'B' : ('A/B', 'B'),
+    'B0': ('A/B/B0', 'A/B0', 'B/B0', 'B0'),
+    'B1': ('A/B/B1', 'A/B1', 'B/B1', 'B1'),
+    'B2': ('A/B/B2', 'A/B2', 'B/B2', 'B2'),
+    'B3': ('A/B/B3', 'A/B3', 'B/B3', 'B3'),
+    'C' : ('A/C', 'C'),
+    'C0': ('A/C/C0', 'A/C0', 'C/C0', 'C0'),
+    'C1': ('A/C/C1', 'A/C1', 'C/C1', 'C1'),
+    'D' : ('A/D', 'D'),
+    'D0': ('A/D/D0', 'A/D0', 'D/D0', 'D0'),
+    'D1': ('A/D/D1', 'A/D1', 'D/D1', 'D1'),
+    'E' : ('A/E', 'E'),
+    'E0': ('A/E/E0', 'A/E0', 'E/E0', 'E0'),
+    'E1': ('A/E/E1', 'A/E1', 'E/E1', 'E1'),
+    'F': ('A/F', 'F'),
+  } # > 33M tests, maybe too much
+
+
+  paths = {
+    'A' : ('A',),
+    'B' : ('A/B', 'B',),
+    'B0': ('A/B/B0', 'A/B0', 'B/B0', 'B0',),
+    'B1': ('B/B1', 'B1',),
+    'B2': ('A/B2', 'B2',),
+    'B3': ('A/B/B3', 'B3',),
+    'C' : ('C',),
+    'C0': ('C/C0', 'C0',),
+    'C1': ('A/C1','C1',),
+    'D' : ('D',),
+    'D0': ('A/D/D0', 'D0',),
+    'D1': ('A/D/D1', 'D1',),
+    'E' : ('E',),
+    'E0': ('E0',),
+    'E1': ('E1',),
+    'F': ('A/F', 'F',),
+  }
+
+  def get_all_paths():
+    for t in itertools.product(*paths.values()):
+      yield {k:v for k,v in zip(paths.keys(), t)}
+
+
+  go_on = True
+  if(go_on):
+    errors = fm_01.generate_lookup()
+    if(bool(errors)):
+      print("ERROR generate_lookup")
+      print(errors)
+      go_on = False
+
+  if(go_on):
+    conf_core, error = fm_01.nf_product(conf_base)
+    if(bool(error)):
+      print(f"ERROR nf_product")
+      print(error)
+      go_on = False
+
+  if(go_on):
+    for i, cpaths in enumerate(get_all_paths()):
+      conf, error = fm_01.nf_product({cpaths[k]:v for k,v in conf_base.items()})
+      if(bool(error)):
+        print(f"ERROR nf_product [{i}]")
+        print(error)
+        go_on = False
+
+      if(go_on and (conf != conf_core)):
+        print(f"ERROR conversion [{i}]")
+        print(conf_core)
+        print('vs')
+        print(conf)
+        go_on = False
+
+
+
+
+def test_fm_make_product():
+  print("==========================================")
+  print("= test_fm_make_product")
+
+  # 1. declarations
+  fm_01 = FD('A',
+    FDAnd('B', FDXor(FD('B0'), FD('B1')), FDXor(FD('B2'), FD('B3'))),
+    FDAny('C', FD('C0'), FD('C1')),
+    FDOr('D', FD('D0'), FD('D1')),
+    FDXor('E', FD('E0'), FD('E1')),
+    Implies(And('B/B0', 'C/C0'), Not('E1')),
+    # Implies(And('B/B1', 'C/C0'), Eq('E1',False)),
+    F=List(size=(1,4), spec=Int(3,5))
+  )
+
+
+  conf_empty = {}
+  conf_base  = {'A':True, 'B': True, 'B0': True, 'B2': True, 'C': True, 'D': True, 'D0': True, 'E': True, 'E0': True, 'F':(3,)}
+
+  tests = (
+    ((conf_empty,), True),
+    ((conf_base, ), True),
+    # B
+    ((conf_base, {'B1': True}), True),
+    ((conf_base, {'B3': True}), True),
+    ((conf_base, {'B1': True, 'B3': True}), True),
+    ((conf_base, {'B0': True, 'B1': True}), False),
+    ((conf_base, {'B2': True, 'B3': True}), False),
+    # C
+    ((conf_base, {'C0': True}), True),
+    ((conf_base, {'C1': True}), True),
+    ((conf_base, {'C0': True, 'C1': True}), True),
+    # D
+    ((conf_base, {'D1': True}), True),
+    ((conf_base, {'D0': True, 'D1': True}), True),
+    ((conf_base, {'D0': False}), False),
+    # E
+    ((conf_base, {'E0': True}), True),
+    ((conf_base, {'E1': True}), True),
+    ((conf_base, {'E0': False}), False),
+    ((conf_base, {'E0': True, 'E1': True}), False),
+    # F
+    ((conf_base, {'F':(3,4,)}), True),
+    ((conf_base, {'F':(3,4,4)}), True),
+    ((conf_base, {'F':()}), False),
+    ((conf_base, {'F':(3,4,5)}), False),
+    ((conf_base, {'F':(3,3,3,3)}), False),
+    # Implies
+    ((conf_base, {'C0': True, 'E0': True}), True),
+    ((conf_base, {'C0': True, 'E1': True}), False),
+    # Sequence
+    ((conf_base, {'B1': True}, {'B0': True}), True),
+  )
+
+  # 2. check FM
+  go_on = True
+
+  if(go_on):
+    errors = fm_01.generate_lookup()
+    if(bool(errors)):
+      print("ERROR generate_lookup")
+      print(errors)
+      go_on = False
+  
+  if(go_on):
+    for confs_raw, expected in tests:
+      confs_n_errors = tuple(fm_01.nf_product(conf) for conf in confs_raw)
+      confs, errors = tuple(zip(*confs_n_errors))
+
+      for i, err in enumerate(errors):
+        if(bool(err)):
+          print(f"ERROR nf_product [{i}]")
+          print(err)
+          go_on = False
+
+      if(go_on):
+        conf = fm_01.make_product(*confs)
+        value = fm_01(conf)
+        if(bool(value) != expected):
+          print(f" value: {value.m_value}")
+          print(f" reason: {value.m_reason}")
+          print(f" nvalue: {value.m_nvalue}")
+          print(f" snodes: {value.m_snodes}")
+
+
+
+
+def test_fm_full():
+  # 1. declarations
+  fm_01 = FD('A',
+    FDAnd('B', FDXor(FD('B0'), FD('B1')), FDXor(FD('B2'), FD('B3'))),
+    FDAny('C', FD('C0'), FD('C1')),
+    FDOr('D', FD('D0'), FD('D1')),
+    FDXor('E', FD('E0'), FD('E1')),
+    Implies(And('B/B0', 'C/C0'), Not('E1')),
+    # Implies(And('B/B1', 'C/C0'), Eq('E1',False)),
+    F=List(size=(1,4), spec=Int(3,5))
+  )
+
 
   paths = {
     'A' : ('A',),
@@ -261,195 +499,111 @@ def test_simple_fm():
     'F': ('A/F', 'F'),
   }
 
-  paths = tuple(paths.values())
-
-  def conf_bool_generator(arg):
-    if(len(arg) == 1):
-      yield (True,)
-      yield (False,)
-    else:
-      for sub in conf_bool_generator(arg[1:]):
-        yield (True,) + sub
-        yield (False,) + sub
-
-  def conf_traversal(arg):
-    if(len(arg) == 1):
-      for el in arg[0]: yield (el,)
-    else:
-      for sub in conf_traversal(arg[1:]):
-        for el in arg[0]: yield (el,) + sub
-
-  for conf in zip(conf_traversal(paths), conf_bool_generator(paths)):
-    prod = {}
-    for el, value in zip(*conf):
-      prod[el] = value
-
-    p_00, errors_00 = fm_01.nf_product(prod)
-
-    if(bool(errors_00)):
-      print("errors_00: product")
-      print(errors_00)
-    else:
-      value_00 = fm_01(p_00)
-      if(not bool(value_00)):
-        print(f" product: {prod}")
-        print(f" value: {value_00.m_value}")
-        print(f" reason: {value_00.m_reason}")
-        print(f" nvalue: {value_00.m_nvalue}")
-        # print(f" snodes: {value_00.m_snodes}")
-
-  return
-
-  conf_01 = {
-    'A' : True,
-    'B' : True,
-    'B0': True,
-    'B1': False,
-    'B2': True,
-    'B3': False,
-    'C' : True,
-    'C0': True,
-    'C1': True,
-    'D' : True,
-    'D0': True,
-    'D1': True,
-    'E' : True,
-    'E0': True,
-    'E1': False,
-    'F': 2
+  paths = {
+    'A' : ('A',),
+    'B' : ('A/B', 'B',),
+    'B0': ('A/B/B0', 'A/B0', 'B/B0', 'B0',),
+    'B1': ('B/B1', 'B1',),
+    'B2': ('A/B2', 'B2',),
+    'B3': ('A/B/B3', 'B3',),
+    'C' : ('C',),
+    'C0': ('C/C0', 'C0',),
+    'C1': ('A/C1','C1',),
+    'D' : ('D',),
+    'D0': ('A/D/D0', 'D0',),
+    'D1': ('A/D/D1', 'D1',),
+    'E' : ('E',),
+    'E0': ('E0',),
+    'E1': ('E1',),
+    'F': ('A/F', 'F',),
   }
 
-  p_01, errors_01 = fm_01.nf_product(conf_01)
-  if(bool(errors_01)):
-    print("errors_01: product")
-    print(errors_01)
-  else:
-    value_01 = fm_01(p_01)
-    if(not bool(value_01)):
-      print(f" value: {value_01.m_value}")
-      print(f" reason: {value_01.m_reason}")
-      print(f" nvalue: {value_01.m_nvalue}")
-      print(f" snodes: {value_01.m_snodes}")
+  def get_all_paths():
+    for t in itertools.product(*paths.values()):
+      yield {k:v for k,v in zip(paths.keys(), t)}
 
 
-  print("==========================================")
+  conf_empty = {}
+  conf_base  = {'A':True, 'B': True, 'B0': True, 'B2': True, 'C': True, 'D': True, 'D0': True, 'E': True, 'E0': True, 'F':(3,)}
 
-
-  conf_02 = {
-    'A' : True,
-    'B' : True,
-    'B0': True,
-    'B1': False,
-    'B2': True,
-    'B3': False,
-    'C' : True,
-    'C0': False,
-    'C1': False,
-    'D' : True,
-    'D0': True,
-    'D1': True,
-    'E' : True,
-    'E0': True,
-    'E1': False,
-    'F': 2
-  }
-
-  p_02, errors_02 = fm_01.nf_product(conf_02)
-  if(bool(errors_02)):
-    print("errors_02: product")
-    print(errors_02)
-  else:
-    value_02 = fm_01(p_02)
-    if(not bool(value_02)):
-      print(f" value: {value_02.m_value}")
-      print(f" reason: {value_02.m_reason}")
-      print(f" nvalue: {value_02.m_nvalue}")
-      print(f" snodes: {value_02.m_snodes}")
-
-
-
-
-  fm_04 = FDXor('Z',
-    FD('P01', fm_01),
-    FD('P02', fm_01),
+  tests = (
+    ((conf_empty,), True),
+    ((conf_base, ), True),
+    # B
+    ((conf_base, {'B1': True}), True),
+    ((conf_base, {'B3': True}), True),
+    ((conf_base, {'B1': True, 'B3': True}), True),
+    ((conf_base, {'B0': True, 'B1': True}), False),
+    ((conf_base, {'B2': True, 'B3': True}), False),
+    # C
+    ((conf_base, {'C0': True}), True),
+    ((conf_base, {'C1': True}), True),
+    ((conf_base, {'C0': True, 'C1': True}), True),
+    # D
+    ((conf_base, {'D1': True}), True),
+    ((conf_base, {'D0': True, 'D1': True}), True),
+    ((conf_base, {'D0': False}), False),
+    # E
+    ((conf_base, {'E0': True}), True),
+    ((conf_base, {'E1': True}), True),
+    ((conf_base, {'E0': False}), False),
+    ((conf_base, {'E0': True, 'E1': True}), False),
+    # F
+    ((conf_base, {'F':(3,4,)}), True),
+    ((conf_base, {'F':(3,4,4)}), True),
+    ((conf_base, {'F':()}), False),
+    ((conf_base, {'F':(3,4,5)}), False),
+    ((conf_base, {'F':(3,3,3,3)}), False),
+    # Implies
+    ((conf_base, {'C0': True, 'E0': True}), True),
+    ((conf_base, {'C0': True, 'E1': True}), False),
+    # Sequence
+    ((conf_base, {'B1': True}, {'B0': True}), True),
   )
 
-  errors_04 = fm_04.generate_lookup()
-  if(bool(errors_04)):
-    print("ERROR 04")
-    print(errors_04)
 
-  # val_1 = "val_1"
-  # val_2 = "val_2"
-  # val_3 = "val_3"
+  # 2. check FM
+  go_on = True
 
-  # f_1 = "f_1"
-  # f_2 = "f_2"
-  # f_3 = "f_3"
-  # f_4 = "f_4"
+  if(go_on):
+    errors = fm_01.generate_lookup()
+    if(bool(errors)):
+      print("ERROR generate_lookup")
+      print(errors)
+      go_on = False
+  
+  if(go_on):
+    for confs_raw, expected in tests:
+      for cpaths in get_all_paths():
+        # print(f"TESTING PATH: {cpaths}")
+        # print(confs_raw)
+        confs_n_errors = tuple(fm_01.nf_product({cpaths[k]:v for k,v in conf.items()}) for conf in confs_raw)
+        confs, errors = tuple(zip(*confs_n_errors))
 
-  # fm_1 = FDAnd(f_1, FDAnd(f_2, Or(f_2, Not(f_2))), FDAnd(f_3), Lt(val_1, val_2), val_1=Int(), val_2=Int(0, 9))
-  # errors = fm_1.generate_lookup()
-  # print("========")
-  # print(fm_1.m_lookup)
-  # print("========")
-  # print(errors)
+        for i, err in enumerate(errors):
+          if(bool(err)):
+            print(f"ERROR nf_product [{i}]")
+            print(err)
+            go_on = False
 
-  # p_1 = {f_1: True, f_2: False, f_3: True, val_1: 1, val_2: 10}
-  # p1, errors = fm_1.nf_product(p_1)
-  # print(f" errors: {errors}")
-  # res = fm_1(p1)
-  # print(f" value: {res.m_value}")
-  # print(f" reason: {res.m_reason}")
+        if(go_on):
+          conf = fm_01.make_product(*confs)
+          value = fm_01(conf)
+          if(bool(value) != expected):
+            print(f" value: {value.m_value}")
+            print(f" reason: {value.m_reason}")
+            print(f" nvalue: {value.m_nvalue}")
+            print(f" snodes: {value.m_snodes}")
 
 
-
-def test_fm_make_product():
-  # 1. check declarations
-  fm_01 = FD('A',
-    FDAnd('B', FDXor(FD('B0'), FD('B1')), FDXor(FD('B2'), FD('B3'))),
-    FDAny('C', FD('C0'), FD('C1')),
-    FDOr('D', FD('D0'), FD('D1')),
-    FDXor('E', FD('E0'), FD('E1')),
-    Implies(And('B/B0', 'C/C0'), 'D/D0'),
-    Implies(And('B/B1', 'C/C0'), Eq('E',1)),
-    F=Bool()
-  )
-
-  errors_01 = fm_01.generate_lookup()
-  if(bool(errors_01)):
-    print("ERROR 01")
-    print(errors_01)
-  else:
-    conf_00 = { 'E': False, 'B0': True }
-    # conf_00 = {}
-    conf_10 = { 'B1': True, 'B3': True, 'D1': True, 'E1': True, 'F': False }
-    conf_01, errors_02 = fm_01.nf_product(conf_00)
-    conf_11, errors_12 = fm_01.nf_product(conf_10)
-    if(bool(errors_02)):
-      print("errors_02: product")
-      print(errors_02)
-    elif(bool(errors_12)):
-      print("errors_12: product")
-      print(errors_12)
-    else:
-      conf_02 = fm_01.make_product(conf_01)
-      # print(conf_02)
-      conf_03 = fm_01.make_product(conf_01, conf_11)
-      print(conf_03)
-
-      # value_02 = fm_01(conf_02)
-      value_02 = fm_01(conf_03)
-      if(not bool(value_02)):
-        print(f" value: {value_02.m_value}")
-        print(f" reason: {value_02.m_reason}")
-        print(f" nvalue: {value_02.m_nvalue}")
-        print(f" snodes: {value_02.m_snodes}")
 
 
 if(__name__ == "__main__"):
   test_simple_constraint()
   test_simple_attribute()
   # test_test()
-  # test_simple_fm()
+  test_fm_values()
+  test_fm_path()
   test_fm_make_product()
+  # test_simple_fm()
+  # test_fm_make_product()
