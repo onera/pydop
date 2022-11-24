@@ -23,18 +23,24 @@
 import networkx as nx
 import inspect
 
-from pydop.fm_core import eval
-
 
 ###############################################################################
 # GENERIC SPL DEFINITION
 ###############################################################################
 
+def check_default(el, product):
+  res = None
+  if(callable(el)):
+    res = el(product)
+  else:
+    res = product.get(el, el)
+  return res
+
 class SPL(object):
 
   __slots__ = ("m_check", "m_fm", "m_core", "m_reg")
 
-  def __init__(self, fm, dreg, core=None, fm_check=eval):
+  def __init__(self, fm, dreg, core=None, fm_check=check_default):
     self.m_check = fm_check 
     self.m_fm = fm
     self.m_reg = dreg
