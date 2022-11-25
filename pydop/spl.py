@@ -21,6 +21,7 @@
 # email: michael.lienhardt@onera.fr
 
 import networkx as nx
+import itertools
 import inspect
 
 
@@ -28,32 +29,27 @@ import inspect
 # GENERIC SPL DEFINITION
 ###############################################################################
 
-def check_default(el, product):
-  res = None
-  if(callable(el)):
-    res = el(product)
-  else:
-    res = product.get(el, el)
-  return res
-
 class SPL(object):
 
-  __slots__ = ("m_check", "m_fm", "m_core", "m_reg")
+  __slots__ = ("m_fm", "m_core", "m_reg")
 
-  def __init__(self, fm, dreg, core=None, fm_check=check_default):
-    self.m_check = fm_check 
+  def __init__(self, fm, dreg, core=None):
     self.m_fm = fm
     self.m_reg = dreg
     self.m_core = core
 
   def __call__(self, product, core=None):
-    if(self.m_check(self.m_fm, product)):
+    is_product = self.m_fm(product)
+    if(is_product):
       variant = core
       if((variant is None) and (self.m_core is not None)):
         variant = self.m_core.new_instance()
 
       for delta_f, guard, nb_args in self.m_reg:
-        if(self.m_check(guard, product)):
+        act = guard(product)
+        # print(f"checking delta \"{delta_f.__name__}\" ({guard}) -> {type(act)}:{bool(act)}")
+        # if(self.m_check(guard, product)):
+        if(act):
           # print(f"BEGIN {delta_f.__name__}")
           if(nb_args == 0):
             tmp_variant = delta_f()
@@ -67,12 +63,17 @@ class SPL(object):
 
       return variant
     else:
-      raise Exception("The given configuration is not a valid product for this SPL")
+      raise Exception(f"The given configuration is not a valid product for this SPL:\n{is_product.m_reason}")
 
 
   def delta(self, guard, *args, **kwargs):
     def __inner(delta_f):
+      nonlocal guard
+      guard, errors = self.m_fm.nf_constraint(guard)
+      if(bool(errors)):
+        raise Exception(f"ERROR in guard of delta {delta_f.__name__}:\n{str(errors)}")
       sig = inspect.signature(delta_f)
+      # print(f"Guard for delta \"{delta_f.__name__}\" = {guard}")
 
       nb_args = len(sig.parameters)
       if (nb_args > 2):
@@ -110,8 +111,8 @@ class RegistryGraph(object):
       raise Exception(f"ERROR: delta \"{name}\" already declared")
     self.m_content.add_node(name, spec=delta_spec)
     # args and kwargs["after"] are previous nodes
-    prevs = tuple(args) + tuple(kwargs.get("after", ()))
-    for prev in args:
+    for prev in itertools.chain(args, kwargs.get("after", ())):
+      # print(f"  adding edge {prev} -> {name}")
       self.m_content.add_edge(prev, name)
 
   def add_order(self, *args):

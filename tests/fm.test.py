@@ -445,20 +445,18 @@ def test_fm_make_product():
       go_on = False
   
   if(go_on):
-    for confs_raw, expected in tests:
-      confs_n_errors = tuple(fm_01.nf_product(conf) for conf in confs_raw)
-      confs, errors = tuple(zip(*confs_n_errors))
+    for i, (confs_raw, expected) in enumerate(tests):
+      conf, errors = fm_01.nf_product(*confs_raw)
 
-      for i, err in enumerate(errors):
-        if(bool(err)):
-          print(f"ERROR nf_product [{i}]")
-          print(err)
-          go_on = False
+      if(bool(errors)):
+        print(f"ERROR nf_product [{i}]")
+        print(errors)
+        go_on = False
 
       if(go_on):
-        conf = fm_01.make_product(*confs)
         value = fm_01(conf)
         if(bool(value) != expected):
+          print(f"ERROR in eval [{i}]: expected = {expected}")
           print(f" value: {value.m_value}")
           print(f" reason: {value.m_reason}")
           print(f" nvalue: {value.m_nvalue}")

@@ -20,11 +20,18 @@
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
-from pydop.fm_core import pred_eval, _empty__, gen_sequence, dict_sequence
+import itertools
 
 
 import enum
 
+
+class _empty_c__(object):
+  __slots__ = ()
+  def __str__(self): return "_empty__"
+  def __repr__(self): return "_empty__"
+
+_empty__ = _empty_c__()
 
 
 
@@ -66,13 +73,10 @@ class _decl_errors__c(object):
     self.m_unbounds = []
     self.m_ambiguities = []
 
-  def add(self, el):
-    if(isinstance(el, _unbound__c)):
-      self.m_unbounds.append(el)
-    elif(isinstance(el, _ambiguous__c)):
-      self.m_ambiguities.append(el)
-    else:
-      raise Exception(f"ERROR: unexpected error type {el.__class__.__name__}")
+  def add_unbound(self, name, path=None):
+    self.m_unbounds.append(_unbound__c(name, path))
+  def add_ambiguous(self, name, path, paths):
+    self.m_unbounds.append(_ambiguous__c(name, path, paths))
 
   @property
   def unbounds(self): return self.m_unbounds
@@ -172,7 +176,7 @@ def _path_check_exists__(path_s, mapping, errors, additional_path=()):
   path = (additional_path + tuple(path[0:-1]))
   decls = mapping.get(name)
   if(decls is None):
-    errors.add(_unbound__c(name))
+    errors.add_unbound(name)
   else:
     refs = []
     length = 0
@@ -182,57 +186,13 @@ def _path_check_exists__(path_s, mapping, errors, additional_path=()):
           refs.append(el)
           length += 1
     if(length == 0):
-      errors.add(_unbound__c(path_s, additional_path))
+      errors.add_unbound(path_s, additional_path)
     elif(length > 1):
       # print(f"AMBIGIUTY: {path_s} => {length} | {refs}")
-      errors.add(_ambiguous__c(path_s, None, tuple(el[1] for el in refs)))
+      errors.add_ambiguous(path_s, None, tuple(el[1] for el in refs))
     else:
       path = refs[0][0]
   return path
-
-
-# def _get_result(res, expected=True):
-#   if(isinstance(res, bool)):
-#     if(res == expected): return _eval_result__c(value=res)
-#     else: return _eval_result__c(value=res, reason=_reason_tree__c(res, f"{res} found"))
-#   else:
-#     return res
-
-
-
-
-  # @staticmethod
-  # def _manage_annex_list(annex_list, name, value):
-  #   if((value is False) and bool(annex_list)): # the name is set to false while there are true features in the subtree
-  #     return [f"Feature \"{name}\" must be True (due to [{', '.join(annex_list)}] being True)"]
-  #   else:
-  #     return []
-
-  # @staticmethod
-  # def _op_and(args, name=None, value=None):
-  #   error_list = []
-  #   annex = []
-  #   for arg in args:
-  #     if(isinstance(arg, bool)):
-  #       if(not arg):
-  #         error_list.append("False found")
-  #     else:
-  #       error_list.extend(arg.m_reasons_list)
-  #       annex.extend(arg.m_annex)
-  #       if(not arg.m_value):
-  #         error_list.append("False found")
-  #   error_list.extend(_eval_result__c._manage_annex_list(annex, name, value))
-    
-  #   error = _eval_result__c._reason_tree__c(name, error_list) if(error_list) else None
-  #   if(value is True): annex.append(name)
-
-  #   return _eval_result__c(error, annex)
-
-
-
-
-# I have an issue where the value of a false feature is false (for the operator), while the feature diagram is true
-
 
 
 
@@ -274,7 +234,7 @@ class _expbool__c(object):
     if(isinstance(el, _expbool__c)):
       return el(product, i, expected)
     else:
-      return product.get(el)
+      return product.get(el, el)
 
   def _get_reason__(self, idx, content): return _reason_tree__c(self.get_name(), idx, content)
   def _check_declarations__(self, path, mapping, errors):
@@ -287,6 +247,8 @@ class _expbool__c(object):
       return sub._check_declarations__(path, mapping, errors)
     elif(isinstance(sub, str)):
       return _path_check_exists__(sub, mapping, errors, path)
+    else:
+      return sub
 
 
 class Lt(_expbool__c):
@@ -531,20 +493,32 @@ class List(Class):
 # Feature Diagrams, Generalized as Groups
 ################################################################################
 
+_default_product_normalization = None
+
+def set_default_product_normalization(f):
+  global _default_product_normalization
+  _default_product_normalization = f
+
+
 class _fdgroup__c(object):
-  __slots__ = ( "m_name", "m_content", "m_ctcs", "m_attributes", "m_lookup", "m_path", "m_errors")
+  __slots__ = ("m_norm", "m_name", "m_content", "m_ctcs", "m_attributes", "m_lookup", "m_path", "m_errors")
 
   ##########################################
   # constructor API
 
   def __init__(self, *args, **kwargs):
   # def __init__(self, name, content, ctcs, attributes):
+    global _default_product_normalization
     name, content, ctcs, attributes = _fdgroup__c._manage_constructor_args__(*args, **kwargs)
+    self.m_norm = _default_product_normalization
     self.m_name = name
     self.m_content = content
     self.m_ctcs = ctcs
     self.m_attributes = attributes
     self.clean()
+
+  def set_product_normalization(self, f):
+    self.m_norm = f
 
   @staticmethod
   def _manage_constructor_args__(*args, **kwargs):
@@ -609,20 +583,32 @@ class _fdgroup__c(object):
 
   def nf_constraint(self, c):
     errors = _decl_errors__c()
-    if(isinstance(c, str)):
-      tmp = And(c)
-      tmp = tmp._check_declarations__(self.m_path, self.m_lookup, errors)
-      res = tmp.m_content[0]
-    else:
-      res = c._check_declarations__(self.m_path, self.m_lookup, errors)
+    if(not isinstance(c, _expbool__c)):
+      c = And(c)
+    res = c._check_declarations__(self.m_path, self.m_lookup, errors)
     return (res, errors)
 
-  def nf_product(self, product):
+  def nf_product(self, *args): # TODO: need to add inconsistency checking (with error list, like always, filled by _infer_sv__)
+    # print(f"nf_product({args})")
     errors = _decl_errors__c()
+    is_true_d = {}
+    for i, p in enumerate(args):
+      for k, v in self._normalize_product__(p, errors).items():
+        is_true_d[k] = (v, i)
+    self._make_product_rec_1(is_true_d)
+    # print("=====================================")
+    # print("is_true_d")
+    # print(is_true_d)
+    # print("=====================================")
     res = {}
-    for key, val in product.items():
-      res[_path_check_exists__(key, self.m_lookup, errors)] = val
+    v_local = is_true_d.get(self, _empty__)
+    if(v_local is _empty__):
+      self._make_product_rec_2(False, is_true_d, res)
+    else:
+      self._make_product_rec_2(v_local[0], is_true_d, res)
+    # print(f" => {res}")
     return (res, errors)
+
 
   def _generate_lookup__rec(self, path_to_self, idx, res, errors):
     # print(f"_generate_lookup__rec({self.m_name}, {idx}, {path_to_self}, {res}, {errors})")
@@ -654,7 +640,7 @@ class _fdgroup__c(object):
         if(_path_includes__(path, el[1])):
           others.append(el[1])
       if(bool(others)):
-        errors.add(_ambiguous__c(name, path, others))
+        errors.add_ambiguous(name, path, others)
         # raise Exception(f"ERROR: ambiguous declaration of feature \"{_path_to_str__(path)}\" (found \"{_path_to_str__(other)}\")")
       tmp.append( (el, (path),) )
     else:
@@ -683,7 +669,7 @@ class _fdgroup__c(object):
     # print(f"   reasons = {', '.join(str(el.m_reason) for el in result_ctc)}")
 
 
-    nvalue_subs  = tuple(gen_sequence((el.m_nvalue for el in results_content), (el.m_value for resu in (result_att, result_ctc) for el in resu)))
+    nvalue_subs  = tuple(itertools.chain((el.m_nvalue for el in results_content), (el.m_value for resu in (result_att, result_ctc) for el in resu)))
     # nvalue_local = product.get(self, _empty__)
     nvalue_local = None
     # print(f"  => compute {nvalue_subs}, {nvalue_local}")
@@ -762,24 +748,17 @@ class _fdgroup__c(object):
         return _eval_result__c(res, _reason_tree__c(name, idx, f"Attribute has erroneous value \"{value}\" => specification returns {res}"))
 
   ##########################################
-  # Update product API
+  # product inner API
 
-  def make_product(self, *args): # TODO: need to add inconsistency checking (with error list, like always, filled by _infer_sv__)
-    is_true_d = {}
-    for i, p in enumerate(args):
-      for k, v in p.items():
-        is_true_d[k] = (v, i)
-    self._make_product_rec_1(is_true_d)
-    # print("=====================================")
-    # print("is_true_d")
-    # print(is_true_d)
-    # print("=====================================")
+  def _normalize_product__(self, product, errors):
     res = {}
-    v_local = is_true_d.get(self, _empty__)
-    if(v_local is _empty__):
-      self._make_product_rec_2(False, is_true_d, res)
-    else:
-      self._make_product_rec_2(v_local[0], is_true_d, res)
+    if(self.m_norm is not None):
+      product = self.m_norm(self, product)
+    for key, val in product.items():
+      if(isinstance(key, str)):
+        res[_path_check_exists__(key, self.m_lookup, errors)] = val
+      else:
+        res[key] = val
     return res
 
   def _make_product_rec_1(self, is_true_d):
@@ -870,7 +849,7 @@ class FDAnd(_fdgroup__c):
   def _get_expected__(self, el, i, expected):
     return (True if(expected) else None)
   def _infer_sv__(self, is_true_d):
-    idx, value = self._make_product_extract_utils__(is_true_d, gen_sequence((self,), self.m_content), expected=None)
+    idx, value = self._make_product_extract_utils__(is_true_d, itertools.chain((self,), self.m_content), expected=None)
     def get_default(el):
       val = is_true_d.get(el, _empty__)
       if((val is _empty__) or (val[1] < idx)):
