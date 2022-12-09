@@ -30,8 +30,8 @@ import sys
 if(__name__ == "__main__"):
   epl_fm = FD("epl",
     FDAnd(FD("Lit", default_lit_value=Int())),
-    FDAny("Print", "Eval"),
-    FDAny("Add")
+    FDAny(FD("Print"), FD("Eval")),
+    FDAny(FD("Add"))
   )
   epl = SPL(epl_fm, RegistryGraph(), VariantModules("EPL"))
 
@@ -83,7 +83,7 @@ if(__name__ == "__main__"):
     @variant.EPL.Lit.modify
     def toInt(self):
       res = original()
-      print(self.toString())
+      # print(self.toString())
       return res
 
   # Add

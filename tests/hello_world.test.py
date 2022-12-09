@@ -22,7 +22,6 @@
 
 
 from pydop.spl import SPL, RegistryGraph
-from pydop.fm_core import make_configuration
 from pydop.fm_diagram import *
 from pydop.operations.modules import VariantModules
 
@@ -43,7 +42,7 @@ if(__name__ == "__main__"):
       FD("lang", lang_v=Enum(Hello)),
     ),
     FDAny(
-      FD("times", times_v=Int(0,None))
+      FD("times", times_v=Int(1,None))
     )
   )
 
@@ -95,8 +94,12 @@ if(__name__ == "__main__"):
 
   # German
   # conf_2 = { "HelloWorld": True, "hello": True, "lang_v": Hello.german, "times": True, "times_v": 3 };
-  conf_2 = hello_world_fm.combine_product(conf_1, { "lang_v": Hello.german, "times_v": 3 })
-  assert(conf_2 == { "HelloWorld": True, "lang": True, "lang_v": Hello.german, "times": True, "times_v": 3 })
+  diff_1 = { "lang_v": Hello.german, "times_v": 3 }
+  conf_2, errors = hello_world_fm.nf_product(conf_1, diff_1)
+  # print("conf_2.m_dict =", conf_2.m_dict)
+  # print("vs =", hello_world_fm.nf_product({ "HelloWorld": True, "lang": True, "lang_v": Hello.german, "times": True, "times_v": 3 })[0].m_dict)
+  assert(not bool(errors))
+  assert(conf_2 == hello_world_fm.nf_product({ "HelloWorld": True, "lang": True, "lang_v": Hello.german, "times": True, "times_v": 3 })[0])
   variant = spl(conf_2)
   variant.register_modules()
   from hw import HW
@@ -105,8 +108,11 @@ if(__name__ == "__main__"):
 
   # no repeat
   # conf_3 = { "HelloWorld": True, "hello": True, "lang_v": Hello.spanish, "times": False };
-  conf_3 = hello_world_fm.combine_product(conf_2, { "lang_v": Hello.spanish, "times": False })
-  assert(conf_3 == { "HelloWorld": True, "lang": True, "lang_v": Hello.spanish, "times": False })
+  conf_3, errors = hello_world_fm.nf_product(conf_2, { "lang_v": Hello.spanish, "times": False })
+  # print("conf_3.m_dict =", conf_3.m_dict)
+  # print("vs =", hello_world_fm.nf_product({ "HelloWorld": True, "lang": True, "lang_v": Hello.spanish, "times": False })[0].m_dict)
+  assert(not bool(errors))
+  assert(conf_3 == hello_world_fm.nf_product({ "HelloWorld": True, "lang": True, "lang_v": Hello.spanish, "times": False })[0])
   variant = spl(conf_3)
   variant.register_modules()
   from hw import HW
@@ -124,35 +130,35 @@ if(__name__ == "__main__"):
   try:
     variant = spl(conf_err1)
     print("ERROR in missing feature")
-  except KeyError: pass
+  except Exception: pass
 
   # 2. wrong group
   conf_err2 = { "HelloWorld": True, "lang": False, "times": True, "times_v": 4 };
   try:
     variant = spl(conf_err2)
     print("ERROR in wrong group")
-  except ValueError: pass
+  except Exception: pass
 
   # 3. bad attribute 1/2
   conf_err3 = { "HelloWorld": True, "lang": True, "lang_v": 1, "times": True, "times_v": 4 };
   try:
     variant = spl(conf_err3)
     print("ERROR in bad attribute 1/2")
-  except ValueError: pass
+  except Exception: pass
 
   # 4. bad attribute 2/2
-  conf_err4 = { "HelloWorld": True, "lang": True, "lang_v": Hello.french, "times": False, "times_v": 4 };
+  conf_err4 = { "HelloWorld": True, "lang": True, "lang_v": Hello.french, "times": True, "times_v": 0 };
   try:
     variant = spl(conf_err4)
     print("ERROR in bad attribute 2/2")
-  except ValueError: pass
+  except Exception: pass
 
 
-  conf1 = {"lang": True, "lang_v": 1, "times": True, "times_v": 4}
-  conf2 = make_configuration(conf1)
-  assert(conf2 == conf1)
-  conf3 = hello_world_fm.make_product(conf2)
-  assert(conf3 == conf_err3)
+  # conf1 = {"lang": True, "lang_v": 1, "times": True, "times_v": 4}
+  # conf2 = make_configuration(conf1)
+  # assert(conf2 == conf1)
+  # conf3 = hello_world_fm.make_product(conf2)
+  # assert(conf3 == conf_err3)
 
 
 

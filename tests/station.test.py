@@ -52,8 +52,8 @@ if(__name__ == "__main__"):
   # signal SPL
 
   signals_fm = FD("Signals",
-    FDXor("Light", "Form"),
-    FDAny("Dir")
+    FDXor(FD("Light"), FD("Form")),
+    FDAny(FD("Dir"))
   )
   signals = SPL(signals_fm, RegistryGraph(), VariantModules("signals"))
   mspl.add("signals", signals)
@@ -96,7 +96,7 @@ if(__name__ == "__main__"):
   # switches SPL
 
   switches_fm = FD("Switch",
-    FDXor("Electric", "Mechanic"),
+    FDXor(FD("Electric"), FD("Mechanic")),
   )
   switches = SPL(switches_fm, RegistryGraph(), VariantModules("switches"))
   mspl.add("switches", switches)
@@ -129,7 +129,7 @@ if(__name__ == "__main__"):
   # interlocking SPL
 
   interlocking_fm = FD("Interlocking",
-    FDAny("Modern", "DirOut")
+    FDAny(FD("Modern"), FD("DirOut"))
   )
   interlocking = SPL(interlocking_fm, RegistryGraph(), VariantModules("InterlockingSys"))
   mspl.add("interlocking", interlocking)
@@ -194,8 +194,8 @@ if(__name__ == "__main__"):
 
   interlocking_prod = { "Interlocking": True, "Modern": False, "DirOut": False }
 
-  p1 = interlocking_fm.combine_product(interlocking_prod, {"DirOut": True})
-  p2 = interlocking_fm.combine_product(interlocking_prod, {"Modern": True})
+  p1, err1 = interlocking_fm.nf_product(interlocking_prod, {"DirOut": True})
+  p2, err2 = interlocking_fm.nf_product(interlocking_prod, {"Modern": True})
   ils1 = import_path("interlocking", p1, "InterlockingSys").CILS()
   ils2 = import_path("interlocking", p2, "InterlockingSys").CILS()
 

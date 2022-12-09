@@ -131,8 +131,8 @@ class VariantModulesInstance(object):
   class _wrapper__(object):
     __slots__ = ("m_instance", "m_root", "m_name", "m_obj",)
     def __new__(cls, *args):
-      if(len(args) > 0):
-        print(f"{len(args)}: {isinstance(args[0], VariantModulesInstance)} vs {(not inspect.isclass(args[0]))}")
+      # if(len(args) > 0):
+      #   print(f"{len(args)}: {isinstance(args[0], VariantModulesInstance)} vs {(not inspect.isclass(args[0]))}")
 
       if((len(args) == 4) and (isinstance(args[0], VariantModulesInstance))):
       # if((len(args) == 4) and (not inspect.isclass(args[0]))):
@@ -296,8 +296,8 @@ class VariantModulesInstance(object):
 
   def _register_obj__(self, obj):
     # print(f"_register_obj__({obj})")
-    if(isinstance(obj, VariantModulesInstance._wrapper__)):
-      print(obj.m_obj)
+    # if(isinstance(obj, VariantModulesInstance._wrapper__)):
+    #   print(obj.m_obj)
     if(inspect.isclass(obj)):
       for i in range(len(obj.__bases__)):
         if(isinstance(obj.__bases__[i], VariantModulesInstance._wrapper__)):

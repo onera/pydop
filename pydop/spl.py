@@ -24,6 +24,7 @@ import networkx as nx
 import itertools
 import inspect
 
+from pydop.fm_diagram import _decl_errors__c, _product__c, _fdgroup__c
 
 ###############################################################################
 # GENERIC SPL DEFINITION
@@ -31,16 +32,46 @@ import inspect
 
 class SPL(object):
 
-  __slots__ = ("m_fm", "m_core", "m_reg")
+  __slots__ = ("m_fm", "m_is_fm", "m_core", "m_reg",)
 
   def __init__(self, fm, dreg, core=None):
+    if(isinstance(fm, _fdgroup__c)):
+      self.m_is_fm = True
+      errors = fm.check()
+      if(bool(errors)):
+        raise ValueError(errors)
+    else:
+      self.m_is_fm = False
     self.m_fm = fm
     self.m_reg = dreg
     self.m_core = core
 
+  def nf_constraint(self, c):
+    if(self.m_is_fm):
+      return self.m_fm.nf_constraint(c)
+    else:
+      return (c, _decl_errors__c())
+
+  def nf_product(self, *args):
+    if(self.m_is_fm):
+      return self.m_fm.nf_product(*args)
+    else:
+      res = {}
+      for arg in args:
+        for k,v in arg.items():
+          res[k] = v
+      return (_product__c(res, None), _decl_errors__c())  
+
   def __call__(self, product, core=None):
+    if(not isinstance(product, _product__c)):
+      product, errors = self.nf_product(product)
+      if(bool(errors)):
+        raise ValueError(errors)
+      # else:
+      #   print("lookup =", self.m_fm.m_lookup)
+      #   print("product =", product.m_dict)
     is_product = self.m_fm(product)
-    if(is_product):
+    if(bool(is_product) and ((not self.m_is_fm) or is_product.m_nvalue)):
       variant = core
       if((variant is None) and (self.m_core is not None)):
         variant = self.m_core.new_instance()
