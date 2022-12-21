@@ -34,6 +34,9 @@ class SPL(object):
   __slots__ = ("m_fm", "m_core", "m_reg")
 
   def __init__(self, fm, dreg, core=None):
+    errors = fm.check()
+    if(bool(errors)):
+      raise ValueError(errors)
     self.m_fm = fm
     self.m_reg = dreg
     self.m_core = core
