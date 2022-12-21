@@ -83,7 +83,7 @@ if(__name__ == "__main__"):
     @variant.EPL.Lit.modify
     def toInt(self):
       res = original()
-      print(self.toString())
+      # print(self.toString())
       return res
 
   # Add

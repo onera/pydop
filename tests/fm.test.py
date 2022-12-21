@@ -464,6 +464,122 @@ def test_fm_make_product():
 
 
 
+def test_fm_constraint():
+  print("==========================================")
+  print("= test_fm_constraint")
+  # 1. declarations
+  fm_01 = FD('A',
+    FDAnd('B', FDXor(FD('B0'), FD('B1')), FDXor(FD('B2'), FD('B3'))),
+    FDAny('C', FD('C0'), FD('C1')),
+    FDOr('D', FD('D0'), FD('D1')),
+    FDXor('E', FD('E0'), FD('E1')),
+    Implies(And('B/B0', 'C/C0'), Not('E1')),
+    # Implies(And('B/B1', 'C/C0'), Eq('E1',False)),
+    F=List(size=(1,4), spec=Int(3,5))
+  )
+
+  val_1 = "B0"
+  val_2 = "B1"
+  val_3 = "C"
+  val_4 = "D0"
+  val_5 = "E0"
+  val_6 = "E1"
+
+  constraint_01 = Lt (val_1, val_2)
+  constraint_02 = Leq(val_2, val_3)
+  constraint_03 = Eq (val_3, val_4)
+  constraint_04 = Geq(val_4, val_5)
+  constraint_05 = Gt (val_5, val_6)
+
+  constraint_10 = And(constraint_01, constraint_02, constraint_03)
+  constraint_11 = Or(constraint_01, constraint_02, constraint_03)
+  constraint_12 = Not(constraint_01)
+  constraint_13 = Xor(constraint_01, constraint_02, constraint_03)
+  constraint_14 = Conflict(constraint_01, constraint_02, constraint_03)
+  constraint_15 = Implies(constraint_01, constraint_02)
+  constraint_16 = Iff(constraint_01, constraint_02)
+
+  constraint_20 = And(constraint_11, constraint_04, constraint_05)
+  constraint_21 = Or(constraint_10, constraint_12, constraint_13)
+  constraint_22 = Not(constraint_11)
+  constraint_23 = Xor(constraint_14, constraint_15, constraint_16)
+  constraint_24 = Conflict(constraint_14, constraint_15, constraint_16)
+  constraint_25 = Implies(constraint_14, constraint_15)
+  constraint_26 = Iff(constraint_14, constraint_16)
+
+  test = (
+    ( constraint_01, { val_1: 0, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, True),  # test  0
+    ( constraint_01, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test  1
+    ( constraint_02, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, True),  # test  2
+    ( constraint_02, { val_1: 0, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test  3
+    ( constraint_03, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, True),  # test  4
+    ( constraint_03, { val_1: 0, val_2: 0, val_3: 1, val_4: 0, val_5: 0, val_6: 0 }, False), # test  5
+    ( constraint_04, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, True),  # test  6
+    ( constraint_04, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 1, val_6: 0 }, False), # test  7
+    ( constraint_05, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 1, val_6: 0 }, True),  # test  8
+    ( constraint_05, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test  9
+
+    ( constraint_10, { val_1: 0, val_2: 1, val_3: 1, val_4: 1, val_5: 0, val_6: 0 }, True),  # test 10
+    ( constraint_10, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test 11
+    ( constraint_11, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, True),  # test 12
+    ( constraint_11, { val_1: 1, val_2: 1, val_3: 0, val_4: 1, val_5: 0, val_6: 0 }, False), # test 13
+    ( constraint_12, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, True),  # test 14
+    ( constraint_12, { val_1: 0, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test 15
+    ( constraint_13, { val_1: 0, val_2: 1, val_3: 0, val_4: 1, val_5: 0, val_6: 0 }, True),  # test 16
+    ( constraint_13, { val_1: 0, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test 17
+    ( constraint_14, { val_1: 1, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, True),  # test 18
+    ( constraint_14, { val_1: 0, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test 19
+    ( constraint_15, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, True),  # test 20
+    ( constraint_15, { val_1: 0, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test 21
+    ( constraint_16, { val_1: 1, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, True),  # test 22
+    ( constraint_16, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test 23
+
+    ( constraint_20, { val_1: 0, val_2: 1, val_3: 1, val_4: 1, val_5: 1, val_6: 0 }, True),  # test 24
+    ( constraint_20, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test 25
+    ( constraint_21, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, True),  # test 26
+    ( constraint_21, { val_1: 0, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test 27
+    ( constraint_22, { val_1: 1, val_2: 1, val_3: 0, val_4: 1, val_5: 0, val_6: 0 }, True),  # test 28
+    ( constraint_22, { val_1: 0, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test 29
+    ( constraint_23, { val_1: 0, val_2: 1, val_3: 0, val_4: 1, val_5: 0, val_6: 0 }, True),  # test 30
+    ( constraint_23, { val_1: 0, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test 31
+    ( constraint_24, { val_1: 0, val_2: 1, val_3: 0, val_4: 1, val_5: 0, val_6: 0 }, True),  # test 32
+    ( constraint_24, { val_1: 1, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, False), # test 33
+    ( constraint_25, { val_1: 0, val_2: 0, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, True),  # test 34
+    ( constraint_25, { val_1: 0, val_2: 1, val_3: 0, val_4: 1, val_5: 0, val_6: 0 }, False), # test 35
+    ( constraint_26, { val_1: 1, val_2: 1, val_3: 0, val_4: 0, val_5: 0, val_6: 0 }, True),  # test 36
+    ( constraint_26, { val_1: 0, val_2: 1, val_3: 1, val_4: 0, val_5: 0, val_6: 0 }, False), # test 37
+  )
+
+  # 2. checking
+
+  go_on = True
+  if(go_on):
+    errors = fm_01.check()
+    if(bool(errors)):
+      print("ERROR check")
+      print(errors)
+      go_on = False
+
+  for i, (c, prod, expected) in enumerate(test):
+    if(go_on):
+      c, errors = fm_01.nf_constraint(c)
+      if(bool(errors)):
+        print(f"ERROR nf_constraint({c})")
+        print(errors)
+        go_on = False
+    if(go_on):
+      prod, errors = fm_01.nf_product(prod)
+      if(bool(errors)):
+        print(f"ERROR nf_product({prod})")
+        print(errors)
+        go_on = False
+    if(go_on):
+      res = c(prod, expected=expected)
+      assert(bool(res) == expected)
+
+
+
+
 
 def test_fm_full():
   # 1. declarations
@@ -603,5 +719,6 @@ if(__name__ == "__main__"):
   test_fm_values()
   test_fm_path()
   test_fm_make_product()
+  test_fm_constraint()
   # test_simple_fm()
   # test_fm_make_product()
