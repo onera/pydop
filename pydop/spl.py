@@ -24,7 +24,7 @@ import networkx as nx
 import itertools
 import inspect
 
-from pydop.fm_diagram import _decl_errors__c, _product__c, _fdgroup__c
+from pydop.fm_diagram import _decl_errors__c, _configuration__c, _fd__c
 
 ###############################################################################
 # GENERIC SPL DEFINITION
@@ -46,40 +46,37 @@ class SPL(object):
     self.m_reg = dreg
     self.m_core = core
 
-  def nf_constraint(self, c):
-    if(self.m_is_fm):
-      return self.m_fm.nf_constraint(c)
-    else:
-      return (c, _decl_errors__c())
+  def link_constraint(self, c):
+    if(self.m_is_fm): return self.m_fm.link_constraint(c)
+    else: return (c, _decl_errors__c())
 
-  def nf_product(self, *args):
-    if(self.m_is_fm):
-      return self.m_fm.nf_product(*args)
+  def link_configuration(self, conf):
+    if(self.m_is_fm): return self.m_fm.link_configuration(conf)
+    else: return (_configuration__c(conf, None), _decl_errors__c())
+
+  def close_configuration(self, *confs):
+    if(self.m_is_fm): return self.m_fm.close_configuration(*confs)
     else:
       res = {}
-      for arg in args:
-        for k,v in arg.items():
+      for conf in confs:
+        for k,v in conf.items():
           res[k] = v
-      return (_product__c(res, None), _decl_errors__c())  
+      return (_configuration__c(res, None), _decl_errors__c())  
 
-  def __call__(self, product, core=None):
-    if(not isinstance(product, _product__c)):
-      product, errors = self.nf_product(product)
+  def __call__(self, conf, core=None):
+    if(not isinstance(conf, _configuration__c)):
+      conf, errors = self.close_configuration(conf)
       if(bool(errors)):
         raise ValueError(errors)
-      # else:
-      #   print("lookup =", self.m_fm.m_lookup)
-      #   print("product =", product.m_dict)
-    is_product = self.m_fm(product)
+    is_product = self.m_fm(conf)
     if(bool(is_product) and ((not self.m_is_fm) or is_product.m_nvalue)):
       variant = core
       if((variant is None) and (self.m_core is not None)):
         variant = self.m_core.new_instance()
 
       for delta_f, guard, nb_args in self.m_reg:
-        act = guard(product)
+        act = guard(conf)
         # print(f"checking delta \"{delta_f.__name__}\" ({guard}) -> {type(act)}:{bool(act)}")
-        # if(self.m_check(guard, product)):
         if(act):
           # print(f"BEGIN {delta_f.__name__}")
           if(nb_args == 0):
@@ -87,7 +84,7 @@ class SPL(object):
           elif(nb_args == 1):
             tmp_variant = delta_f(variant)
           else:
-            tmp_variant = delta_f(variant, product)
+            tmp_variant = delta_f(variant, conf)
           if(tmp_variant is not None):
             variant = tmp_variant
           # print(f"END {delta_f.__name__}")
@@ -100,7 +97,7 @@ class SPL(object):
   def delta(self, guard, *args, **kwargs):
     def __inner(delta_f):
       nonlocal guard
-      guard, errors = self.m_fm.nf_constraint(guard)
+      guard, errors = self.m_fm.link_constraint(guard)
       if(bool(errors)):
         raise Exception(f"ERROR in guard of delta {delta_f.__name__}:\n{str(errors)}")
       sig = inspect.signature(delta_f)

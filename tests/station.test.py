@@ -194,8 +194,8 @@ if(__name__ == "__main__"):
 
   interlocking_prod = { "Interlocking": True, "Modern": False, "DirOut": False }
 
-  p1, err1 = interlocking_fm.nf_product(interlocking_prod, {"DirOut": True})
-  p2, err2 = interlocking_fm.nf_product(interlocking_prod, {"Modern": True})
+  p1, err1 = interlocking_fm.close_configuration(interlocking_prod, {"DirOut": True})
+  p2, err2 = interlocking_fm.close_configuration(interlocking_prod, {"Modern": True})
   ils1 = import_path("interlocking", p1, "InterlockingSys").CILS()
   ils2 = import_path("interlocking", p2, "InterlockingSys").CILS()
 

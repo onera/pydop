@@ -306,18 +306,19 @@ class _lookup__c(object):
 ################################################################################
 
 class _configuration__c(object):
-  __slots__ = ("m_dict", "m_fm", "m_original")
-  def __init__(self, d, fm=None, original=None):
+  __slots__ = ("m_dict", "m_fm", "m_names")
+  def __init__(self, d, fm=None, names=None):
     self.m_dict = d
     self.m_fm = fm
-    self.m_original = original
+    self.m_names = names
 
   def get(self, key, errors, default=None):
     global _empty__
     res = self.m_dict.get(key, _empty__)
     if(res is _empty__):
       if(isinstance(key, str) and (self.m_fm is not None)):
-        key_resolved = self.m_fm.m_lookup.get(key, errors, None)
+        key_path = _path_from_str__(key)
+        key_resolved = self.m_fm.m_lookup.get(key_path, errors, None)
         if(key_resolved is not None):
           return self.m_dict.get(key_resolved, default)
     return res
@@ -325,7 +326,7 @@ class _configuration__c(object):
   def __getitem__(self, key):
     global _empty__
     errors = _decl_errors__c()
-    res = self.get(key, _empty__)
+    res = self.get(key, errors, _empty__)
     if(res is _empty__):
       if(errors):
         raise KeyError(str(errors))
@@ -334,17 +335,14 @@ class _configuration__c(object):
 
   def unlink(self):
     if(self.m_fm is None): return self.m_dict
-    else: return self.m_original
+    else: return {(self.m_names.get(key, key)): val for key, val in self.m_dict.items()}
 
   def __eq__(self, other):
     if(isinstance(other, _configuration__c)):
       return ((self.m_dict == other.m_dict) and (self.m_fm == other.m_fm))
 
   def __str__(self):
-    if(self.m_fm is None):
-      return str(self.m_dict)
-    else:
-      return str({(_path_to_str__(self.m_fm.m_dom[key]) if(key in self.m_fm.m_dom) else key): val for key, val in self.m_dict.items()})
+    return str(self.unlink())
 
 
 ################################################################################
@@ -948,8 +946,16 @@ class _fd__c(object):
   def _link_configuration__(self, conf, errors):
     if(self.m_norm is not None):
       conf = self.m_norm(self, conf)
-    linked = {(self.m_lookup.get(_path_from_str__(key), errors, key) if(isinstance(key, str)) else key): val for key, val in conf.items()}
-    return _configuration__c(linked, self, conf)
+    linked = {}
+    names = {}
+    for key, val in conf.items():
+      if(isinstance(key, str)):
+        key_resolved = self.m_lookup.get(_path_from_str__(key), errors, None)
+        if(key_resolved is not None):
+          names[key_resolved] = key
+          key = key_resolved
+      linked[key] = val
+    return _configuration__c(linked, self, names)
 
   def _close_configuration_1__(self, is_true_d):
     idx, v_local, v_subs = self._infer_sv__(is_true_d)

@@ -23,7 +23,7 @@
 
 from pydop.spl import SPL, RegistryGraph
 from pydop.fm_diagram import *
-from pydop.operations.modules import VariantModules
+from pydop.operations.modules import VariantModules, register_modules, unregister_modules
 
 import sys
 
@@ -64,7 +64,7 @@ if(__name__ == "__main__"):
     default_lit_value = product["default_lit_value"]
     @variant.EPL.add
     class Lit(variant.EPL.Exp, variant.EPL.A):
-      __slots__ = ("val",)
+      # __slots__ = ("val",) <= incomatible with class copying
       def __init__(self, x=default_lit_value):
         self.val = x
 
@@ -92,7 +92,7 @@ if(__name__ == "__main__"):
   def setup_add(variant):
     @variant.EPL.add
     class Add(variant.EPL.Exp):
-      __slots__ = ("a", "b",)
+      # __slots__ = ("a", "b",) <= incomatible with class copying
       def __init__(self, a, b):
         self.a = a
         self.b = b
@@ -115,7 +115,7 @@ if(__name__ == "__main__"):
   variant = epl(conf_1)
 
   # insertion in the module list
-  variant.register_modules()
+  register_modules(variant)
 
   # getting the module EPL
   # EPL = sys.modules['EPL']
