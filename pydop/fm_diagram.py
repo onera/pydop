@@ -31,6 +31,11 @@ class _empty_c__(object):
 
 _empty__ = _empty_c__()
 
+
+def _path_to_str__(path): return ("None" if(path is None) else "/".join(path))
+def _path_from_str__(s): return s.split('/')
+
+
 ################################################################################
 # error reporting
 ################################################################################
@@ -39,6 +44,7 @@ _empty__ = _empty_c__()
 # 1. feature model naming consistency
 
 class _unbound__c(object):
+  # when a name is not declared
   __slots__ = ("m_name", "m_path",)
   def __init__(self, name, path=None):
     self.m_name = name
@@ -47,9 +53,10 @@ class _unbound__c(object):
     if(self.m_path is None):
       return f"ERROR: variable \"{self.m_name}\" not declared"
     else:
-      return f"ERROR: variable \"{self.m_name}\" not declared in path \"{_path_to_str__(self.m_path)}\""
+      return f"ERROR: variable \"{self.m_name}\" not declared in (partial) path \"{_path_to_str__(self.m_path)}\""
 
 class _ambiguous__c(object):
+  # when a partial path corresponds to several possibilities
   __slots__ = ("m_name", "m_path", "m_paths",)
   def __init__(self, name, path, paths):
     self.m_name  = name
@@ -62,31 +69,40 @@ class _ambiguous__c(object):
     else:
       return f"ERROR: reference \"{_path_to_str__(self.m_path)}[{self.m_name}]\" is ambiguous (corresponds to paths: {tmp})"
 
+class _duplicate__c(object):
+  # when the same path correspond to the same object
+  __slots__ = ("m_path", "m_objs",)
+  def __init__(self, path, obj_main, obj_other):
+    self.m_path = path
+    self.m_objs = [obj_main, obj_other]
+  def add(self, obj):
+    self.m_objs.append(objs)
+  def __str__(self):
+    tmp = ", ".join(f"\"{type(obj)}\"" for obj in self.m_objs)
+    return f"ERROR: path \"{_path_to_str__(self.m_path)}\" correspond to more than one object (found types {tmp})"
 
 class _decl_errors__c(object):
-  __slots__ = ("m_unbounds", "m_ambiguities",)
+  __slots__ = ("m_unbounds", "m_ambiguities", "m_duplicates",)
   def __init__(self):
     self.m_unbounds = []
     self.m_ambiguities = []
+    self.m_duplicates = {}
 
   def add_unbound(self, name, path=None):
     self.m_unbounds.append(_unbound__c(name, path))
   def add_ambiguous(self, name, path, paths):
     self.m_unbounds.append(_ambiguous__c(name, path, paths))
-
-  @property
-  def unbounds(self): return self.m_unbounds
-  @property
-  def ambiguities(self): return self.m_ambiguities
-
-  def has_unbounds(self): return bool(self.m_unbounds)
-  def has_ambiguities(self): return bool(self.m_ambiguities)
+  def add_duplicate(self, path, obj_main, obj_other):
+    ref = self.m_duplicates.get(path)
+    if(ref is None):
+      self.m_duplicates[path] = _duplicate__c(path, obj_main, obj_other)
+    else:
+      ref.add(obj_main)
 
   def __bool__(self):
-    return bool(self.m_unbounds) or bool(self.m_ambiguities)
+    return bool(self.m_unbounds) or bool(self.m_ambiguities) or bool(self.m_duplicates)
   def __str__(self):
-    return "\n".join(str(el) for l in (self.m_unbounds, self.m_ambiguities) for el in l)
-
+    return "\n".join(str(el) for el in itertools.chain(self.m_unbounds, self.m_ambiguities, self.m_duplicates.values()))
 
 ##########################################
 # 2. constraint and fm evaluation
@@ -123,13 +139,6 @@ class _reason_dependencies__c(object):
   def __str__(self):
     tmp = ', '.join(f"\"{el}\"" for el in self.m_deps)
     return f"{self.m_ref} should be True due to dependencies (found: {tmp})"
-
-# def manage_ref(ref, reg_names):
-#   if((reg_names is _empty__) or (isinstance(ref, str))):
-#     return ref
-#   else:
-#     return reg_names.get(ref)
-
 
 class _reason_value_mismatch__c(object):
   __slots__ = ("m_name", "m_ref", "m_val", "m_expected",)
@@ -235,53 +244,107 @@ class _eval_result_fd__c(_eval_result__c):
 
 
 ################################################################################
-# paths and partial paths manipulation
+# path lookup class
 ################################################################################
 
-def _path_includes__(p, p_included):
-  # print(f"_path_includes__({p}, {p_included})")
-  idx_p = 0
-  idx_included = 0
-  len_p = len(p)
-  len_included = len(p_included)
-  while(idx_included < len_included):
-    if(idx_p < len_p):
-      if(p[idx_p] == p_included[idx_included]):
-        idx_included += 1
-      idx_p += 1
+class _lookup__c(object):
+  __slots__ = ("m_content")
+  def __init__(self):
+    self.m_content = {}
+
+  def insert(self, obj, path, errors):
+    name = path[-1]
+    decls = self.m_content.get(name)
+    if(decls is None):
+      self.m_content[name] = [ (obj, path) ]
     else:
-      # print("  => False")
-      return False
-  # print("  => True")
-  return True
+      other = None
+      for obj_other, path_other in decls:
+        if(path == path_other):
+          other = obj_other
+          break
+      if(other is not None):
+        errors.add_duplicate(path, obj, other)
+      decls.append( (obj, path) )
 
-def _path_to_str__(path): return ("None" if(path is None) else "/".join(path))
-def _path_from_str__(s): return s.split('/')
-
-
-def _path_check_exists__(path_s, mapping, errors, additional_path=()):
-  path = _path_from_str__(path_s)
-  name = path[-1]
-  path = (additional_path + tuple(path[0:-1]))
-  decls = mapping.get(name)
-  if(decls is None):
-    errors.add_unbound(name)
-  else:
-    refs = []
-    length = 0
-    for el in decls:
-      # if(_path_includes__(el[1], path + (path,))):
-      if(_path_includes__(el[1], path)):
-          refs.append(el)
-          length += 1
-    if(length == 0):
-      errors.add_unbound(path_s, additional_path)
-    elif(length > 1):
-      # print(f"AMBIGIUTY: {path_s} => {length} | {refs}")
-      errors.add_ambiguous(path_s, None, tuple(el[1] for el in refs))
+  def get(self, path, errors, default=None):
+    name = path[-1]
+    decls = self.m_content.get(name)
+    if(decls is None):
+      errors.add_unbound(name)
     else:
-      path = refs[0][0]
-  return path
+      refs = tuple(filter((lambda data: _lookup__c._path_includes__(data[1], path)), decls))
+      length = len(refs)
+      if(length == 0):
+        errors.add_unbound(name, path[:-1])
+      elif(length > 1):
+        errors.add_ambiguous(name, path[:-1], tuple(data[1] for data in refs))
+      else:
+        return refs[0][0]
+    return default
+
+  @staticmethod
+  def _path_includes__(p, p_included):
+    # print(f"_path_includes__({p}, {p_included})")
+    idx_p = 0
+    idx_included = 0
+    len_p = len(p)
+    len_included = len(p_included)
+    while(idx_included < len_included):
+      if(idx_p < len_p):
+        if(p[idx_p] == p_included[idx_included]):
+          idx_included += 1
+        idx_p += 1
+      else:
+        # print("  => False")
+        return False
+    # print("  => True")
+    return True
+
+################################################################################
+# configuration class
+################################################################################
+
+class _configuration__c(object):
+  __slots__ = ("m_dict", "m_fm", "m_original")
+  def __init__(self, d, fm=None, original=None):
+    self.m_dict = d
+    self.m_fm = fm
+    self.m_original = original
+
+  def get(self, key, errors, default=None):
+    global _empty__
+    res = self.m_dict.get(key, _empty__)
+    if(res is _empty__):
+      if(isinstance(key, str) and (self.m_fm is not None)):
+        key_resolved = self.m_fm.m_lookup.get(key, errors, None)
+        if(key_resolved is not None):
+          return self.m_dict.get(key_resolved, default)
+    return res
+
+  def __getitem__(self, key):
+    global _empty__
+    errors = _decl_errors__c()
+    res = self.get(key, _empty__)
+    if(res is _empty__):
+      if(errors):
+        raise KeyError(str(errors))
+      else: KeyError(key)
+    else: return res
+
+  def unlink(self):
+    if(self.m_fm is None): return self.m_dict
+    else: return self.m_original
+
+  def __eq__(self, other):
+    if(isinstance(other, _configuration__c)):
+      return ((self.m_dict == other.m_dict) and (self.m_fm == other.m_fm))
+
+  def __str__(self):
+    if(self.m_fm is None):
+      return str(self.m_dict)
+    else:
+      return str({(_path_to_str__(self.m_fm.m_dom[key]) if(key in self.m_fm.m_dom) else key): val for key, val in self.m_dict.items()})
 
 
 ################################################################################
@@ -290,8 +353,6 @@ def _path_check_exists__(path_s, mapping, errors, additional_path=()):
 
 ##########################################
 # 1. main class (for all non leaf behavior)
-
-
 
 class _expbool__c(object):
   __slots__ = ("m_content",)
@@ -358,8 +419,8 @@ class Var(_expbool__c):
     return _eval_result__c(res, reason)
   def __str__(self): return f"Var({self.m_content})"
 
-  def _check_declarations__(self, path, mapping, errors):
-    return Var(_path_check_exists__(self.m_content, mapping, errors, path))
+  def _check_declarations__(self, path, lookup, errors):
+    return Var(lookup.get(path + _path_from_str__(self.m_content), errors, self.m_content))
 
 class Lit(_expbool__c):
   # override _expbool__c default tree behavior (Lit is a leaf)
@@ -631,39 +692,7 @@ def set_default_product_normalization(f):
   global _default_product_normalization
   _default_product_normalization = f
 
-class _product__c(object):
-  __slots__ = ("m_dict", "m_fm",)
-  def __init__(self, d, fm):
-    self.m_dict = d
-    self.m_fm = fm
-  def get(self, key, default=None):
-    global _empty__
-    res = self.m_dict.get(key, _empty__)
-    if(res is _empty__):
-      if(isinstance(key, str)):
-        el = self._manage_path__(key)
-        return self.m_dict.get(el, default)
-      else:
-        res = default
-    return res
-  def __getitem__(self, key):
-    res = self.get(key, _empty__)
-    if(res is _empty__): raise KeyError(key)
-    else: return res
 
-  def _manage_path__(self, key):
-    if(self.m_fm is None):
-      return key
-    else:
-      errors = _decl_errors__c()
-      res = _path_check_exists__(key, self.m_fm.m_lookup, errors)
-      if(bool(errors)):
-        raise ValueError(errors)
-      return res
-
-  def __eq__(self, other):
-    if(isinstance(other, _product__c)):
-      return ((self.m_dict == other.m_dict) and (self.m_fm == other.m_fm))
 
 ##########################################
 # 1. core implementation
@@ -753,158 +782,94 @@ class _fd__c(object):
   def generate_lookup(self):
     if(self.m_lookup is None):
       self.m_errors = _decl_errors__c()
-      self.m_lookup = {}
+      self.m_lookup = _lookup__c()
       self.m_dom    = {}
       self._generate_lookup_rec__([], 0, self.m_lookup, self.m_dom, self.m_errors)
     return self.m_errors
 
-  def nf_constraint(self, c):
+  def link_constraint(self, c):
     if(self.m_lookup is None):
-      raise ValueError(f"ERROR: a non-root feature cannot put a constraint in normal form (detected feature \"{self}\")")
+      raise ValueError(f"ERROR: a non-root feature cannot link a constraint (detected feature \"{self}\").\nDid you forget to call \"generate_lookup\"?")
     errors = _decl_errors__c()
     c = _expbool__c._manage_parameter__(c)
     res = c._check_declarations__(self.m_dom[self], self.m_lookup, errors)
     return (res, errors)
 
-  def nf_product(self, *args):
+  def link_configuration(self, conf):
     if(self.m_lookup is None):
-      raise ValueError(f"ERROR: a non-root feature cannot put a product in normal form (detected feature \"{self}\")")
+      raise ValueError(f"ERROR: a non-root feature cannot link a configuration (detected feature \"{self}\").\nDid you forget to call \"generate_lookup\"?")
+    errors = _decl_errors__c()
+    res = self._link_configuration__(conf, errors)
+    return (res, errors)
+
+  def close_configuration(self, *confs):
+    if(self.m_lookup is None):
+      raise ValueError(f"ERROR: a non-root feature cannot close a configuration (detected feature \"{self}\").\nDid you forget to call \"generate_lookup\"?")
     errors = _decl_errors__c()
     is_true_d = {}
-    for i, p in enumerate(args):
-      if(isinstance(p, _product__c)):
-        p = p.m_dict
-      for k, v in self._normalize_product__(p, errors).items():
-        is_true_d[k] = (v, i)
-    self._make_product_rec_1(is_true_d)
+    for i, conf in enumerate(confs):
+      if(not isinstance(conf, _configuration__c)):
+        conf = self._link_configuration__(conf, errors)
+      else: assert(conf.m_fm is self)
+      conf_dict = conf.m_dict
+      for k, v in conf_dict.items(): is_true_d[k] = (v, i)
+    self._close_configuration_1__(is_true_d)
     # print("=====================================")
     # print("is_true_d")
     # print(is_true_d)
     # print("=====================================")
     res = {}
     v_local = is_true_d.get(self, _empty__)
-    if(v_local is _empty__):
-      self._make_product_rec_2(False, is_true_d, res)
-    else:
-      self._make_product_rec_2(v_local[0], is_true_d, res)
-    # print(f" => {res}")
-    return (_product__c(res, self), errors)
+    if(v_local is _empty__): self._close_configuration_2__(False, is_true_d, res)
+    else: self._close_configuration_2__(v_local[0], is_true_d, res)
+    return (_configuration__c(res, self), errors)
 
-# <<<<<<< HEAD
-# =======
-
-#   def _generate_lookup__rec(self, path_to_self, idx, lookup, dom, errors):
-#     # print(f"_generate_lookup__rec({self.m_name}, {idx}, {path_to_self}, {lookup}, {errors})")
-#     # 1. if local names, add it to the table, and check no duplicates
-#     path_to_self.append(str(idx) if(self.m_name is None) else self.m_name)
-#     local_path = tuple(path_to_self)
-#     # self.m_path = local_path
-#     if(self.m_name is not None):
-#       _fdgroup__c._check_duplicate__(self, self.m_name, local_path, lookup, errors)
-#       # dom[self] = _path_to_str__(local_path)
-#     dom[self] = local_path
-#     # 2. add subs
-#     for i, sub in enumerate(self.m_content):
-#       sub._generate_lookup__rec(path_to_self, i, lookup, dom, errors)
-#     # 3. add attributes
-#     for att_def in self.m_attributes:
-#       _fdgroup__c._check_duplicate__(att_def, att_def[0], local_path, lookup, errors)
-#       # dom[att_def] = _path_to_str__(local_path + (att_def[0],))
-#       dom[att_def] = local_path + (att_def[0],)
-#     # 4. check ctcs
-#     # print(self.m_ctcs)
-#     self.m_ctcs = tuple(ctc._check_declarations__(local_path, lookup, errors) for ctc in self.m_ctcs)
-#     path_to_self.pop()
-#     # 5. reset path_to_self
-
-#   @staticmethod
-#   def _check_duplicate__(el, name, path, res, errors):
-#     # print(f"_check_duplicate__({el}, {name}, {path}, {res})")
-#     tmp = res.get(name)
-#     if(tmp is not None):
-#       others = []
-#       for el in tmp:
-#         if(_path_includes__(path, el[1])):
-#           others.append(el[1])
-#       if(bool(others)):
-#         errors.add_ambiguous(name, path, others)
-#         # raise Exception(f"ERROR: ambiguous declaration of feature \"{_path_to_str__(path)}\" (found \"{_path_to_str__(other)}\")")
-#       tmp.append( (el, (path),) )
-#     else:
-#       res[name] = [(el, (path),)]
-
-# >>>>>>> 7c6d2db75a78cb175ddcfc0444a9e1e70e3d35b5
   ##########################################
   # call API
 
-  def __call__(self, product, expected=True):
+  def __call__(self, conf, expected=True):
     if(self.m_dom is None):
       raise ValueError("ERROR: evaluating a non well-formed Feature Model (call 'check()' on it before)")
-    # reason = _reason_tree__c(self, 0)
-    # for el in self.m_dom.keys():
-    #   if(el not in product): reason.add_reason_value_none(el)
-    # if(bool(reason)): res = _eval_result_fd__c(False, reason, False, ())
-    # else: res = self._eval_generic__(product, _fd__c._f_get_deep__, expected)
-    res = self._eval_generic__(product, _fd__c._f_get_deep__, expected)
+    res = self._eval_generic__(conf, _fd__c._f_get_deep__, expected)
     reason = res.m_reason
     if(reason):
       reason.update_ref(self._updater__)
       pass
     return res
 
-  def _eval_generic__(self, product, f_get, expected=True):
-    # print(f"_eval_generic__([{self.__class__.__name__}]{self.m_path}, {product}, {f_get}, {expected})")
-    # print(f"_eval_generic__([{self.__class__.__name__}]{_path_to_str__(self.m_path)})")
-    # print(f"_eval_generic__({_path_to_str__(self.m_path)})")
+  def _eval_generic__(self, conf, f_get, expected=True):
+    # print(f"_eval_generic__([{self.__class__.__name__}]{self.m_name}, {conf}, {f_get}, {expected})")
     expected_att = (_empty__ if(expected is False) else expected)
 
-    results_content = tuple(f_get(el, product, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
-    # print(f" => computed results_content: {results_content}")
-    # print(f"   reasons = {', '.join(str(el.m_reason) for el in results_content)}")
-    result_att = tuple(self._manage_attribute__(el, product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_attributes))
-    # print(f" => computed result_att: {result_att}")
-    # print(f"   reasons = {', '.join(str(el.m_reason) for el in result_att)}")
-    result_ctc = tuple(_expbool__c._eval_generic__(el, product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_ctcs))
-    # print(f" => computed result_ctc: {result_ctc}")
-    # print(f"   reasons = {', '.join(str(el.m_reason) for el in result_ctc)}")
-
+    results_content = tuple(f_get(el, conf, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
+    result_att = tuple(self._manage_attribute__(el, conf, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_attributes))
+    result_ctc = tuple(_expbool__c._eval_generic__(el, conf, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_ctcs))
 
     nvalue_subs  = tuple(itertools.chain((el.m_nvalue for el in results_content), (el.m_value for resu in (result_att, result_ctc) for el in resu)))
-    # nvalue_local = product.get(self, _empty__)
     nvalue_local = None
-    # print(f"  => compute {nvalue_subs}, {nvalue_local}")
     nvalue_sub = self._compute__(nvalue_subs, nvalue_local)
-    # print(f"  => nvalue_sub = {nvalue_sub}")
     value_subs = all(el.m_value for el in results_content)
     snodes = tuple(v for el in results_content for v in el.m_snodes)
-
-    # print(f" => computed res: {res}")
 
     # check consistency with name
     reason = None
     if(self.m_name is not None):
-      nvalue_local = product.get(self, _empty__)
+      nvalue_local = conf.get(self, _empty__)
       if(nvalue_local is _empty__): # should never occur
         reason = _reason_tree__c(self, 0)
         reason.add_reason_value_none(self)
-        # reason = f"Feature {_path_to_str__(self.m_path)} has no value in the input product"
       elif((not nvalue_local) and snodes):
         reason = _reason_tree__c(self, 0)
         reason.add_reason_dependencies(self, snodes)
-        # tmp = ', '.join(f"\"{_path_to_str__(el.m_path)}\"" for el in snodes)
-        # reason = f"Feature {_path_to_str__(self.m_path)} should be set to True due to validated subfeatures (found: {tmp})"
       elif(nvalue_local and (not nvalue_sub)):
         reason = _reason_tree__c(self, 0)
         reason.add_reason_value_mismatch(self, True, False)
-        # reason = f"Feature {_path_to_str__(self.m_path)} is selected while its content is False"
       elif(nvalue_local):
         snodes = snodes + (self,)
     else:
       nvalue_local = nvalue_sub
 
     value = value_subs and (reason is None)
-    # print(f"  => nvalue_local = {nvalue_local}")
-    # print(f"  => value = {value}")
 
     if((nvalue_local != expected) or (not value)):
       if(reason is None): reason = _reason_tree__c(self, 0)
@@ -915,11 +880,11 @@ class _fd__c(object):
 
     return _eval_result_fd__c(value, reason, nvalue_local, snodes)
 
-  def _f_get_shallow__(self, product, expected=True):
+  def _f_get_shallow__(self, conf, expected=True):
     if(self.m_name is None):
-      return self._eval_generic__(product, _fd__c._f_get_shallow__, expected)
+      return self._eval_generic__(conf, _fd__c._f_get_shallow__, expected)
     else:
-      nvalue = product.get(self, _empty__)
+      nvalue = conf.get(self, _empty__)
       if(v is _empty__):
         reason = _reason_tree__c(self, 0)
         reason.add_reason_value_none(self)
@@ -929,18 +894,17 @@ class _fd__c(object):
       else:
         return _eval_result_fd__c(True, None, nvalue, ())
 
-  def _f_get_deep__(self, product, expected=True):
-    return self._eval_generic__(product, _fd__c._f_get_deep__, expected)
+  def _f_get_deep__(self, conf, expected=True):
+    return self._eval_generic__(conf, _fd__c._f_get_deep__, expected)
 
-  def _manage_attribute__(self, att, product, idx, expected):
+  def _manage_attribute__(self, att, conf, idx, expected):
     name, spec = att
-    value = product.get(att, _empty__)
+    value = conf.get(att, _empty__)
     if(value is _empty__):
       if(expected):
         reason = _reason_tree__c(self, 0)
         reason.add_reason_value_none(att)
         return _eval_result__c(False, reason)
-        # return _eval_result__c(False, _reason_tree__c(name, idx, "Attribute has no value in the input product"))
       else:
         return _eval_result__c(False, None)
     else:
@@ -951,65 +915,47 @@ class _fd__c(object):
         reason = _reason_tree__c(self, 0)
         reason.add_reason_value_mismatch(att, res, expected)
         return _eval_result__c(res, reason)
-        # return _eval_result__c(res, _reason_tree__c(name, idx, f"Attribute has erroneous value \"{value}\" => specification returns {res}"))
 
   ##########################################
   # internal: lookup generation
 
   def _generate_lookup_rec__(self, path_to_self, idx, lookup, dom, errors):
-    # print(f"_generate_lookup_rec__({self.m_name}, {idx}, {path_to_self}, {lookup}, {errors})")
+    # print(f"_generate_lookup_rec__([{self.__class__.__name__}]{self.m_name}, {idx}, {path_to_self}, {lookup}, {errors})")
     # 1. if local names, add it to the table, and check no duplicates
     path_to_self.append(str(idx) if(self.m_name is None) else self.m_name)
-    local_path = tuple(path_to_self)
+    local_path = list(path_to_self)
     if(self.m_name is not None):
-      _fd__c._check_duplicate__(self, self.m_name, local_path, lookup, errors)
+      lookup.insert(self, local_path, errors)
+      # _fd__c._check_duplicate__(self, self.m_name, local_path, lookup, errors)
       dom[self] = local_path
     # 2. add subs
     for i, sub in enumerate(self.m_content):
       sub._generate_lookup_rec__(path_to_self, i, lookup, dom, errors)
     # 3. add attributes
     for att_def in self.m_attributes:
-      _fd__c._check_duplicate__(att_def, att_def[0], local_path, lookup, errors)
-      dom[att_def] = local_path + (att_def[0],)
+      att_path = [*local_path, att_def[0]]
+      lookup.insert(att_def, att_path, errors)
+      # _fd__c._check_duplicate__(att_def, att_def[0], local_path, lookup, errors)
+      dom[att_def] = att_path
     # 4. check ctcs
     self.m_ctcs = tuple(ctc._check_declarations__(local_path, lookup, errors) for ctc in self.m_ctcs)
     # 5. reset path_to_self
     path_to_self.pop()
 
-  @staticmethod
-  def _check_duplicate__(el, name, path, res, errors):
-    # print(f"_check_duplicate__({el}, {name}, {path}, {res})")
-    tmp = res.get(name)
-    if(tmp is not None):
-      others = []
-      for obj, path_other in tmp:
-        if(_path_includes__(path, path_other)):
-          others.append(path_other)
-      if(bool(others)):
-        errors.add_ambiguous(name, path, others)
-      tmp.append( (el, path,) )
-    else:
-      res[name] = [(el, path,)]
-
   ##########################################
-  # internal: product nf API
+  # internal: configuration nf API
 
-  def _normalize_product__(self, product, errors):
-    res = {}
+  def _link_configuration__(self, conf, errors):
     if(self.m_norm is not None):
-      product = self.m_norm(self, product)
-    for key, val in product.items():
-      if(isinstance(key, str)):
-        res[_path_check_exists__(key, self.m_lookup, errors)] = val
-      else:
-        res[key] = val
-    return res
+      conf = self.m_norm(self, conf)
+    linked = {(self.m_lookup.get(_path_from_str__(key), errors, key) if(isinstance(key, str)) else key): val for key, val in conf.items()}
+    return _configuration__c(linked, self, conf)
 
-  def _make_product_rec_1(self, is_true_d):
+  def _close_configuration_1__(self, is_true_d):
     idx, v_local, v_subs = self._infer_sv__(is_true_d)
     self._make_product_update__(is_true_d, idx, v_local, v_subs)
     for sub in self.m_content:
-      sub._make_product_rec_1(is_true_d)
+      sub._close_configuration_1__(is_true_d)
     idx, v_local, v_subs = self._infer_sv__(is_true_d)
     self._make_product_update__(is_true_d, idx, v_local, v_subs)
 
@@ -1020,17 +966,14 @@ class _fd__c(object):
       if(v_sub is not _empty__):
         is_true_d[sub] = (v_sub, idx)
 
-  def _make_product_rec_2(self, v_local, is_true_d, res):
-    # _, _, v_subs = self._make_product_extract__(is_true_d)
-    # print(f"  {self} :subs[0] => {v_subs}")
+  def _close_configuration_2__(self, v_local, is_true_d, res):
     _, _, v_subs = self._infer_sv__(is_true_d)
-    # print(f"  {self} :subs[1] => {v_subs}")
     res[self] = v_local
     for sub, v_sub in zip(self.m_content, v_subs):
       if(v_sub is _empty__):
-        sub._make_product_rec_2(False, is_true_d, res)
+        sub._close_configuration_2__(False, is_true_d, res)
       else:
-        sub._make_product_rec_2(v_sub, is_true_d, res)
+        sub._close_configuration_2__(v_sub, is_true_d, res)
     # if feature selected, need to include the attribute 
     if(v_local):
       for att_def in self.m_attributes:
@@ -1068,30 +1011,11 @@ class _fd__c(object):
       v_subs = tuple(f(is_true_d.get(sub, _empty__)) for sub in domain)
       return idx, v_subs
 
-
-
-  ##########################################
-  # print for error report
-
   def _updater__(self, ref):
-    # print(f"FD._updater__({ref})")
-    # res = self.m_dom.get(ref, ref)
-    # print(f"  => {res}")
-    # return res
     return self.m_dom.get(ref, ref)
 
-  # def __str__(self):
-  #   return "TMP"
-  #   # if(self.m_path is None):
-  #   #   return object.__str__(self)
-  #   # else:
-  #   #   return _path_to_str__(self.m_path)
-
-  # def __repr__(self): return str(self)
-  
-
-
-
+##########################################
+# 2. FD groups
 
 class FDAnd(_fd__c):
   def __init__(self, *args, **kwargs):
@@ -1111,7 +1035,6 @@ class FDAnd(_fd__c):
     v_local = get_default(self)
     return idx, v_local, tuple(get_default(sub) for sub in self.m_content)
 
-
 class FDAny(_fd__c):
   def __init__(self, *args, **kwargs):
     _fd__c.__init__(self, *args, **kwargs)
@@ -1127,7 +1050,6 @@ class FDAny(_fd__c):
       idx_local = idx_subs
       v_local = True
     return idx_local, v_local, v_subs
-
 
 class FDOr(_fd__c):
   def __init__(self, *args, **kwargs):
@@ -1167,6 +1089,10 @@ class FDXor(_fd__c):
       v_subs = tuple((is_true_d.get(sub, (False, -1)) == (True, idx_subs)) for sub in self.m_content)
     return idx_local, v_local, v_subs
 
+##########################################
+# 3. FD singleton
 
 class FD(FDAnd): pass
+class FDMandatory(FDAnd): pass
+class FDOptional(FDAny): pass
 

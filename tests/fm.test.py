@@ -262,10 +262,10 @@ def test_fm_values():
   
   if(go_on):
     for conf_raw, expected in tests:
-      conf, error = fm_01.nf_product(conf_raw)
+      conf, error = fm_01.close_configuration(conf_raw)
 
       if(bool(error)):
-        print(f"ERROR nf_product")
+        print(f"ERROR close_configuration")
         print(error)
         go_on = False
 
@@ -356,7 +356,7 @@ def test_fm_path():
       go_on = False
 
   if(go_on):
-    conf_core, error = fm_01.nf_product(conf_base)
+    conf_core, error = fm_01.close_configuration(conf_base)
     if(bool(error)):
       print(f"ERROR nf_product")
       print(error)
@@ -364,7 +364,7 @@ def test_fm_path():
 
   if(go_on):
     for i, cpaths in enumerate(get_all_paths()):
-      conf, error = fm_01.nf_product({cpaths[k]:v for k,v in conf_base.items()})
+      conf, error = fm_01.close_configuration({cpaths[k]:v for k,v in conf_base.items()})
       if(bool(error)):
         print(f"ERROR nf_product [{i}]")
         print(error)
@@ -446,10 +446,10 @@ def test_fm_make_product():
   
   if(go_on):
     for i, (confs_raw, expected) in enumerate(tests):
-      conf, errors = fm_01.nf_product(*confs_raw)
+      conf, errors = fm_01.close_configuration(*confs_raw)
 
       if(bool(errors)):
-        print(f"ERROR nf_product [{i}]")
+        print(f"ERROR close_configuration [{i}]")
         print(errors)
         go_on = False
 
@@ -562,15 +562,15 @@ def test_fm_constraint():
 
   for i, (c, prod, expected) in enumerate(test):
     if(go_on):
-      c, errors = fm_01.nf_constraint(c)
+      c, errors = fm_01.link_constraint(c)
       if(bool(errors)):
-        print(f"ERROR nf_constraint({c})")
+        print(f"ERROR link_constraint({c})")
         print(errors)
         go_on = False
     if(go_on):
-      prod, errors = fm_01.nf_product(prod)
+      prod, errors = fm_01.close_configuration(prod)
       if(bool(errors)):
-        print(f"ERROR nf_product({prod})")
+        print(f"ERROR close_configuration({prod})")
         print(errors)
         go_on = False
     if(go_on):
@@ -691,12 +691,12 @@ def test_fm_full():
       for cpaths in get_all_paths():
         # print(f"TESTING PATH: {cpaths}")
         # print(confs_raw)
-        confs_n_errors = tuple(fm_01.nf_product({cpaths[k]:v for k,v in conf.items()}) for conf in confs_raw)
+        confs_n_errors = tuple(fm_01.close_configuration({cpaths[k]:v for k,v in conf.items()}) for conf in confs_raw)
         confs, errors = tuple(zip(*confs_n_errors))
 
         for i, err in enumerate(errors):
           if(bool(err)):
-            print(f"ERROR nf_product [{i}]")
+            print(f"ERROR close_configuration [{i}]")
             print(err)
             go_on = False
 
