@@ -21,54 +21,82 @@
 # email: michael.lienhardt@onera.fr
 
 
+from pydop.spl import SPL
+from pydop.utils import _empty__
+
 ###############################################################################
 # GENERIC MSPL DEFINITION
 ###############################################################################
 
 class MSPL(object):
-  __slots__ = ("m_spls", "m_proxies",)
-  def __init__(self):
-    self.m_spls = {}
-    self.m_proxies = {}
+  __slots__ = ("m_spl_cls", "m_reg",)
+  def __init__(self, spl_cls=SPL):
+    self.m_spl_cls = spl_cls
+    self.m_reg = {}
 
-  class proxy(object):
-    __slots__ = ("m_main", "m_spl_id", "m_conf", "m_obj",)
-    def __init__(self, main, spl_id, conf):
-      self.m_main   = main
-      self.m_spl_id = spl_id
-      self.m_conf   = conf
-      self.m_obj    = self
+  def _check_name__(self, name):
+    if(name in self.m_reg):
+      raise KeyError(f"ERROR: spl id \"{name}\" already registered")
 
-    def _generate_(self):
-      tmp = object.__getattribute__(self, "m_obj")
-      if(tmp is self):
-        main   = object.__getattribute__(self, "m_main")
-        spl_id = object.__getattribute__(self, "m_spl_id")
-        conf   = object.__getattribute__(self, "m_conf")
-        tmp    = main.m_spls[spl_id](conf)
-        setattr(self, "m_obj", tmp)
-      return tmp
+  ## spl creation
+  def new(self, spl_id, *args, **kwargs):
+    self._check_name__(spl_id)
+    res = self.m_spl_cls(*args, **kwargs)
+    return self._add__(spl_id, res)
 
-    def __getattribute__(self, name):
-      tmp = object.__getattribute__(self, "_generate_")()
-      return getattr(tmp, name)
+  def add(self, spl_id, spl):
+    self._check_name__(spl_id)
+    self._check_name__(spl)
+    return self._add__(spl_id, res)
 
-  def add(self, spl_id, spl=None):
-    if(spl_id in self.m_spls):
-      raise KeyError(f"ERROR: spl id \"{spl_id}\" already registered")
-    if(spl is None):
-      def res(spl):
-        self.m_spls[spl_id] = spl
-      return res
+  def __setitem__(self, spl_id, spl):
+    return self.add(spl_id, spl)
+
+  def _add__(self, spl_id, spl):
+    res = _wrapper__c(spl)
+    self.m_reg[spl_id] = res
+    self.m_reg[spl] = res
+    return res
+
+  ## getters
+  def get(self, spl_id, default=None):
+    return self.m_reg.get(key, default)
+
+  def get(self, spl_id, conf, default=None):
+    global _empty__
+    spl = self.m_reg.get(key, _empty__)
+    if(spl is not _empty__):
+      return spl(conf)
     else:
-      self.m_spls[spl_id] = spl
+      return default
 
-  def import_variant(self, spl_id, conf):
-    conf_key = tuple(sorted(conf.items()))
-    key = (spl_id, conf_key,)
-    value = self.m_proxies.get(key)
-    if(value is None):
-      value = MSPL.proxy(self, spl_id, conf)
-      self.m_proxies[key] = value
-    return value
+  def __getitem__(self, key):
+    global _empty__
+    res = self.m_reg.get(key, _empty__)
+    if(res is _empty__):
+      if(isinstance(key, (list, tuple)) and (len(key) == 2)):
+        spl_id, conf = key
+        spl = self.m_reg[spl_id]
+        res = spl(conf)
+    return res
+
+
+class _wrapper__c(object):
+  __slots__ = ("m_obj", "m_reg",)
+  def __init__(self, obj):
+    self.m_obj = obj
+    self.m_reg = {}
+
+  def __call__(self, conf, core=None):
+    global _empty__
+    conf = self.m_obj.close_configuration(conf)
+    key = tuple(sorted(conf.items()))
+    res = self.m_reg.get(key, _empty__)
+    if(res is _empty__):
+      res = self.m_obj(conf, core)
+      self.m_reg[key] = res
+    return res
+
+  def __getattr__(self, name):
+    return getattr(self.m_obj, name)
 

@@ -20,24 +20,9 @@
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
+class _empty_c__(object):
+  __slots__ = ()
+  def __str__(self): return "_empty__"
+  def __repr__(self): return "_empty__"
 
-##########################################
-# Translates common product representations into dict
-
-def make_configuration(fm, data):
-  if(isinstance(data, dict)):
-    res = data
-  elif(isinstance(data, (set, tuple, list,))):
-    res = {}
-    for el in data:
-      if(isinstance(el, str)):
-        res[el] = True
-      elif(isinstance(el, (tuple, list,)) and (len(el) == 2)):
-        res[el[0]] = el[1]
-      else:
-        raise TypeError(f"ERROR: unexpected type in configuration (expected: str or tuple/list or size 2; found {type(el)})")
-  else:
-    raise TypeError(f"ERROR unexpected configuration type (expected: dict/set/tuple/list; found {type(configuration)}")
-  return res
-
-
+_empty__ = _empty_c__()

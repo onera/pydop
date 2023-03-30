@@ -20,11 +20,43 @@
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
-import networkx as nx
 import itertools
 import inspect
+import typing
 
-from pydop.fm_diagram import _decl_errors__c, _configuration__c, _fd__c
+import networkx as nx
+
+
+from pydop.fm_result import decl_errors__c, eval_result__c
+from pydop.fm_configuration import configuration__c
+from pydop.fm_constraint import Lit
+# from pydop.fm_diagram import decl_errors__c, _configuration__c, _fd__c
+
+
+###############################################################################
+# EXPECTED API
+###############################################################################
+
+
+# for constraints
+
+class constraint__proto(typing.Protocol):
+  def __call__(self, p: typing.Union[dict, configuration__c]) -> eval_result__c: pass
+
+# for feature models
+
+
+T = typing.TypeVar('T')
+class feature_model_proto(typing.Protocol):
+  # declaration part
+  def check(self) -> decl_errors__c: pass
+  def link_constraint(self, c: constraint__proto ) -> tuple[constraint__proto, decl_errors__c]: pass
+  def link_configuration(self, p: typing.Union[dict, configuration__c]) -> tuple[configuration__c, decl_errors__c]: pass
+  # check part
+  def __call__(self, p: typing.Union[dict, configuration__c]) -> eval_result__c
+
+
+
 
 ###############################################################################
 # GENERIC SPL DEFINITION
@@ -32,44 +64,46 @@ from pydop.fm_diagram import _decl_errors__c, _configuration__c, _fd__c
 
 class SPL(object):
 
-  __slots__ = ("m_fm", "m_is_fm", "m_core", "m_reg",)
+  __slots__ = ("m_fm", "m_core", "m_reg",)
 
   def __init__(self, fm, dreg, core=None):
-    if(isinstance(fm, _fd__c)):
-      self.m_is_fm = True
-      errors = fm.check()
-      if(bool(errors)):
-        raise ValueError(errors)
-    else:
-      self.m_is_fm = False
+    if(isinstance(fm, bool)): fm = Lit(fm)
+    errors = fm.check()
+    if(bool(errors)):
+      raise ValueError(errors)
     self.m_fm = fm
     self.m_reg = dreg
     self.m_core = core
 
+  ## forward calls to the feature model
+
   def link_constraint(self, c):
-    if(self.m_is_fm): return self.m_fm.link_constraint(c)
-    else: return (c, _decl_errors__c())
+    return self.m_fm.link_constraint(c)
+    # if(self.m_is_fm): return self.m_fm.link_constraint(c)
+    # else: return (c, _decl_errors__c())
 
   def link_configuration(self, conf):
-    if(self.m_is_fm): return self.m_fm.link_configuration(conf)
-    else: return (_configuration__c(conf, None), _decl_errors__c())
+    return self.m_fm.link_configuration(conf)
+    # if(self.m_is_fm): return self.m_fm.link_configuration(conf)
+    # else: return (_configuration__c(conf, None), _decl_errors__c())
 
   def close_configuration(self, *confs):
-    if(self.m_is_fm): return self.m_fm.close_configuration(*confs)
-    else:
-      res = {}
-      for conf in confs:
-        for k,v in conf.items():
-          res[k] = v
-      return (_configuration__c(res, None), _decl_errors__c())  
+    return self.m_fm.close_configuration(*confs)
+    # if(self.m_is_fm): return self.m_fm.close_configuration(*confs)
+    # else:
+    #   res = {}
+    #   for conf in confs:
+    #     for k,v in conf.items():
+    #       res[k] = v
+    #   return (_configuration__c(res, None), _decl_errors__c())  
 
   def __call__(self, conf, core=None):
-    if(not isinstance(conf, _configuration__c)):
+    if(not isinstance(conf, configuration__c)):
       conf, errors = self.close_configuration(conf)
       if(bool(errors)):
         raise ValueError(errors)
     is_product = self.m_fm(conf)
-    if(bool(is_product) and ((not self.m_is_fm) or is_product.m_nvalue)):
+    if(bool(is_product)):
       variant = core
       if((variant is None) and (self.m_core is not None)):
         variant = self.m_core.new_instance()

@@ -23,224 +23,14 @@
 import itertools
 import enum
 
+from pydop.fm_result import decl_errors__c, reason_tree__c, eval_result__c
+from pydop.utils import _empty__
 
-class _empty_c__(object):
-  __slots__ = ()
-  def __str__(self): return "_empty__"
-  def __repr__(self): return "_empty__"
 
-_empty__ = _empty_c__()
 
 
 def _path_to_str__(path): return ("None" if(path is None) else "/".join(path))
 def _path_from_str__(s): return s.split('/')
-
-
-################################################################################
-# error reporting
-################################################################################
-
-##########################################
-# 1. feature model naming consistency
-
-class _unbound__c(object):
-  # when a name is not declared
-  __slots__ = ("m_name", "m_path",)
-  def __init__(self, name, path=None):
-    self.m_name = name
-    self.m_path = path
-  def __str__(self):
-    if(self.m_path is None):
-      return f"ERROR: variable \"{self.m_name}\" not declared"
-    else:
-      return f"ERROR: variable \"{self.m_name}\" not declared in (partial) path \"{_path_to_str__(self.m_path)}\""
-
-class _ambiguous__c(object):
-  # when a partial path corresponds to several possibilities
-  __slots__ = ("m_name", "m_path", "m_paths",)
-  def __init__(self, name, path, paths):
-    self.m_name  = name
-    self.m_path  = path
-    self.m_paths = paths
-  def __str__(self):
-    tmp = ", ".join(f"\"{_path_to_str__(p)}\"" for p in self.m_paths)
-    if(self.m_path is None):
-      return f"ERROR: reference \"{self.m_name}\" is ambiguous (corresponds to paths: {tmp})"
-    else:
-      return f"ERROR: reference \"{_path_to_str__(self.m_path)}[{self.m_name}]\" is ambiguous (corresponds to paths: {tmp})"
-
-class _duplicate__c(object):
-  # when the same path correspond to the same object
-  __slots__ = ("m_path", "m_objs",)
-  def __init__(self, path, obj_main, obj_other):
-    self.m_path = path
-    self.m_objs = [obj_main, obj_other]
-  def add(self, obj):
-    self.m_objs.append(objs)
-  def __str__(self):
-    tmp = ", ".join(f"\"{type(obj)}\"" for obj in self.m_objs)
-    return f"ERROR: path \"{_path_to_str__(self.m_path)}\" correspond to more than one object (found types {tmp})"
-
-class _decl_errors__c(object):
-  __slots__ = ("m_unbounds", "m_ambiguities", "m_duplicates",)
-  def __init__(self):
-    self.m_unbounds = []
-    self.m_ambiguities = []
-    self.m_duplicates = {}
-
-  def add_unbound(self, name, path=None):
-    self.m_unbounds.append(_unbound__c(name, path))
-  def add_ambiguous(self, name, path, paths):
-    self.m_unbounds.append(_ambiguous__c(name, path, paths))
-  def add_duplicate(self, path, obj_main, obj_other):
-    ref = self.m_duplicates.get(path)
-    if(ref is None):
-      self.m_duplicates[path] = _duplicate__c(path, obj_main, obj_other)
-    else:
-      ref.add(obj_main)
-
-  def __bool__(self):
-    return bool(self.m_unbounds) or bool(self.m_ambiguities) or bool(self.m_duplicates)
-  def __str__(self):
-    return "\n".join(str(el) for el in itertools.chain(self.m_unbounds, self.m_ambiguities, self.m_duplicates.values()))
-
-##########################################
-# 2. constraint and fm evaluation
-
-class _reason_value_mismatch__c(object):
-  __slots__ = ("m_name", "m_ref", "m_val", "m_expected",)
-  def __init__(self, ref, val, expected=None):
-    self.m_ref = ref
-    self.m_val = val
-    self.m_expected = expected
-  def update_ref(self, updater): self.m_ref = updater(self.m_ref)
-  def __str__(self):
-    if(expected is None):
-      return f"{self.m_ref} vs {self.m_val}"
-    else:
-      return f"{self.m_ref} vs {self.m_val} (expected: {self.m_expected})"
-
-class _reason_value_none__c(object):
-  __slots__ = ("m_ref",)
-  def __init__(self, ref):
-    self.m_ref = ref
-  def update_ref(self, updater): self.m_ref = updater(self.m_ref)
-  def __str__(self):
-    return f"{self.m_ref} has no value in the input configuration"
-
-class _reason_dependencies__c(object):
-  __slots__ = ("m_ref", "m_deps",)
-  def __init__(self, ref, deps):
-    self.m_ref = ref
-    self.m_deps = deps
-  def update_ref(self, updater):
-    self.m_ref = updater(self.m_ref)
-    self.m_deps = tuple(updater(el) for el in self.m_deps)
-  def __str__(self):
-    tmp = ', '.join(f"\"{el}\"" for el in self.m_deps)
-    return f"{self.m_ref} should be True due to dependencies (found: {tmp})"
-
-class _reason_value_mismatch__c(object):
-  __slots__ = ("m_name", "m_ref", "m_val", "m_expected",)
-  def __init__(self, ref, val, expected=None):
-    self.m_ref = ref
-    self.m_val = val
-    self.m_expected = expected
-  def update_ref(self, updater): self.m_ref = updater(self.m_ref)
-  def __str__(self):
-    if(self.m_expected is None):
-      return f"{self.m_ref} vs {self.m_val}"
-    else:
-      return f"{self.m_ref} vs {self.m_val} (expected: {self.m_expected})"
-
-class _reason_value_none__c(object):
-  __slots__ = ("m_ref",)
-  def __init__(self, ref):
-    self.m_ref = ref
-  def update_ref(self, updater): self.m_ref = updater(self.m_ref)
-  def __str__(self):
-    return f"{self.m_ref} has no value in the input configuration"
-
-class _reason_dependencies__c(object):
-  __slots__ = ("m_ref", "m_deps",)
-  def __init__(self, ref, deps):
-    self.m_ref = ref
-    self.m_deps = deps
-  def update_ref(self, updater):
-    self.m_ref = updater(self.m_ref)
-    self.m_deps = tuple(updater(el) for el in self.m_deps)
-  def __str__(self):
-    tmp = ', '.join(f"\"{el}\"" for el in self.m_deps)
-    return f"{self.m_ref} should be True due to dependencies (found: {tmp})"
-
-class _reason_tree__c(object):
-  __slots__ = ("m_ref", "m_local", "m_subs", "m_count",)
-  def __init__(self, name, idx):
-    self.m_ref = f"[{idx}]" if(name is None) else name
-    self.m_local = []
-    self.m_subs = []
-    self.m_count = 0
-
-  def add_reason_value_mismatch(self, ref, val, expected=None):
-    self.m_local.append(_reason_value_mismatch__c(ref, val, expected))
-    self.m_count += 1
-  def add_reason_value_none(self, ref):
-    self.m_local.append(_reason_value_none__c(ref))
-    self.m_count += 1
-  def add_reason_dependencies(self, ref, deps):
-    self.m_local.append(_reason_dependencies__c(ref, deps))
-    self.m_count += 1  
-  def add_reason_sub(self, sub):
-    if((isinstance(sub, _eval_result__c)) and (sub.m_reason is not None) and (bool(sub.m_reason))):
-      self.m_subs.append(sub.m_reason)
-      self.m_count += 1
-
-  def update_ref(self, updater):
-    self.m_ref = updater(self.m_ref)
-    for el in itertools.chain(self.m_local, self.m_subs):
-      el.update_ref(updater)
-
-  def _tostring__(self, indent):
-    if(self.m_count == 0):
-      return ""
-    elif(self.m_count == 1):
-      if(self.m_local):
-        return f"{indent}{self.m_ref}: {self.m_local[0]}\n"
-      else:
-        return f"{indent}{self.m_ref}: {self.m_subs[0]._tostring__(indent)}\n"
-    else:
-      res = f"{indent}{self.m_ref}: (\n"
-      indent_more = f"{indent} "
-      for e in self.m_local:
-        res += f"{indent_more}{e}\n"
-      for s in self.m_subs:
-        res += s._tostring__(indent_more)
-      res += f"{indent})\n"
-      return res
-
-  def __bool__(self): return (self.m_count != 0)
-  def __str__(self): return self._tostring__("")
-
-
-################################################################################
-# constraint and feature model evaluation result
-################################################################################
-
-class _eval_result__c(object):
-  __slots__ = ("m_value", "m_reason", "m_snodes")
-  def __init__(self, value, reason):
-    self.m_value  = value   # the result of the evaluation
-    self.m_reason = reason  # reason for which the result is not what was expected
-
-  def value(self): return self.m_value
-  def __bool__(self): return self.value()
-
-class _eval_result_fd__c(_eval_result__c):
-  __slots__ = ("m_nvalue", "m_snodes")
-  def __init__(self, value, reason, nvalue, snodes):
-    _eval_result__c.__init__(self, value, reason)
-    self.m_nvalue = nvalue  # the value of the current feature, used for propagation within a FD
-    self.m_snodes = snodes  # the list of sub nodes that are True
 
 
 ################################################################################
@@ -283,6 +73,20 @@ class _lookup__c(object):
         return refs[0][0]
     return default
 
+  def resolve(self, key, errors, default=None):
+    key_path = None
+    if(isinstance(key, str)):
+      key_path = _path_from_str__(key)
+    else if(isinstance(key, (list, tuple))):
+      valid = all(map((lambda e: isinstance(e, str)), key))
+      if(valid):
+        key_path = key
+    if(key_path is not None):
+      return self.get(key_path, errors, default)
+    else:
+      return default
+
+
   @staticmethod
   def _path_includes__(p, p_included):
     # print(f"_path_includes__({p}, {p_included})")
@@ -301,260 +105,19 @@ class _lookup__c(object):
     # print("  => True")
     return True
 
-################################################################################
-# configuration class
-################################################################################
-
-class _configuration__c(object):
-  __slots__ = ("m_dict", "m_fm", "m_names")
-  def __init__(self, d, fm=None, names=None):
-    self.m_dict = d
-    self.m_fm = fm
-    self.m_names = names
-
-  def get(self, key, errors, default=None):
-    global _empty__
-    res = self.m_dict.get(key, _empty__)
-    if(res is _empty__):
-      if(isinstance(key, str) and (self.m_fm is not None)):
-        key_path = _path_from_str__(key)
-        key_resolved = self.m_fm.m_lookup.get(key_path, errors, None)
-        if(key_resolved is not None):
-          return self.m_dict.get(key_resolved, default)
-    return res
-
-  def __getitem__(self, key):
-    global _empty__
-    errors = _decl_errors__c()
-    res = self.get(key, errors, _empty__)
-    if(res is _empty__):
-      if(errors):
-        raise KeyError(str(errors))
-      else: KeyError(key)
-    else: return res
-
-  def unlink(self):
-    if(self.m_fm is None): return self.m_dict
-    else: return {(self.m_names.get(key, key)): val for key, val in self.m_dict.items()}
-
-  def __eq__(self, other):
-    if(isinstance(other, _configuration__c)):
-      return ((self.m_dict == other.m_dict) and (self.m_fm == other.m_fm))
-
-  def __str__(self):
-    return str(self.unlink())
-
 
 ################################################################################
-# Boolean constraints
+# feature model evaluation result
 ################################################################################
 
-##########################################
-# 1. main class (for all non leaf behavior)
+class _eval_result_fd__c(eval_result__c):
+  __slots__ = ("m_nvalue", "m_snodes")
+  def __init__(self, value, reason, nvalue, snodes):
+    eval_result__c.__init__(self, value, reason)
+    self.m_nvalue = nvalue  # the value of the current feature, used for propagation within a FD
+    self.m_snodes = snodes  # the list of sub nodes that are True
 
-class _expbool__c(object):
-  __slots__ = ("m_content",)
-  def __init__(self, content):
-    self.m_content = tuple(_expbool__c._manage_parameter__(param) for param in content)
-
-  def get_name(self): return self.__class__.__name__
-
-  def __call__(self, product, idx=None, expected=True):
-    # print(f"{self.__class__.__name__}.__call__({product}, {idx}, {expected})")
-    results = tuple(_expbool__c._eval_generic__(el, product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
-    values = tuple(el.value() for el in results)
-    # print(f"  => values  = {values}")
-    res = self._compute__(values)
-    if(res == expected):
-      reason = None
-    else:
-      reason = _reason_tree__c(self.get_name(), idx)
-      for i, el in enumerate(self.m_content):
-        reason.add_reason_value_mismatch(el, results[i], self._get_expected__(el, i, expected))
-      for r in results:
-        reason.add_reason_sub(r)
-    return _eval_result__c(res, reason)
- 
-  def __str__(self): return f"{self.get_name()}({', '.join(str(el) for el in self.m_content)})"
-
-  @staticmethod
-  def _eval_generic__(el, product, i, expected):
-    if(isinstance(el, _expbool__c)):
-      return el(product, i, expected)
-    else:
-      return product.get(el, el)
-
-  @staticmethod
-  def _manage_parameter__(param):
-    if(isinstance(param, _expbool__c)):
-      return param
-    elif(isinstance(param, str)):
-      return Var(param)
-    else:
-      return Lit(param)
-
-  def _check_declarations__(self, path, mapping, errors):
-    res = _expbool__c(tuple(map((lambda sub: sub._check_declarations__(path, mapping, errors)), self.m_content)))
-    res.__class__ = self.__class__
-    return res
-
-##########################################
-# 2. leafs
-
-class Var(_expbool__c):
-  # override _expbool__c default tree behavior (Var is a leaf)
-  __slots__ = ()
-  def __init__(self, var):
-    self.m_content = var
-  def __call__(self, product, idx=None, expected=True):
-    global _empty__
-    res = product.get(self.m_content, _empty__)
-    if(res is _empty__):
-      reason = _reason_tree__c(self.get_name(), idx)
-      reason.add_reason_value_none(self.m_content)
-    else:
-      reason = None
-    return _eval_result__c(res, reason)
-  def __str__(self): return f"Var({self.m_content})"
-
-  def _check_declarations__(self, path, lookup, errors):
-    return Var(lookup.get(path + _path_from_str__(self.m_content), errors, self.m_content))
-
-class Lit(_expbool__c):
-  # override _expbool__c default tree behavior (Lit is a leaf)
-  __slots__ = ()
-  def __init__(self, var):
-    self.m_content = var
-  def __call__(self, product, idx=None, expected=True):
-    return _eval_result__c(self.m_content, None)
-  def __str__(self): return f"Lit({self.m_content})"
-
-  def _check_declarations__(self, path, mapping, errors):
-    return self
-
-##########################################
-# 3. constraint over non-booleans
-
-class Lt(_expbool__c):
-  __slots__ = ()
-  def __init__(self, left, right):
-    _expbool__c.__init__(self, (left, right,))
-  def _compute__(self, values):
-    return (values[0] < values[1])
-  def _get_expected__(self, el, idx, expected): return None
-      
-class Leq(_expbool__c):
-  __slots__ = ()
-  def __init__(self, left, right):
-    _expbool__c.__init__(self, (left, right,))
-  def _compute__(self, values):
-    return (values[0] <= values[1])
-  def _get_expected__(self, el, idx, expected): return None
-
-class Eq(_expbool__c):
-  __slots__ = ()
-  def __init__(self, left, right):
-    _expbool__c.__init__(self, (left, right,))
-  def _compute__(self, values):
-    return (values[0] == values[1])
-  def _get_expected__(self, el, idx, expected): return None
-
-class Geq(_expbool__c):
-  __slots__ = ()
-  def __init__(self, left, right):
-    _expbool__c.__init__(self, (left, right,))
-  def _compute__(self, values):
-    return (values[0] >= values[1])
-  def _get_expected__(self, el, idx, expected): return None
-
-class Gt(_expbool__c):
-  __slots__ = ()
-  def __init__(self, left, right):
-    _expbool__c.__init__(self, (left, right,))
-  def _compute__(self, values):
-    # print(f"Gt._compute__({values})")
-    return (values[0] > values[1])
-  def _get_expected__(self, el, idx, expected): return None
-
-##########################################
-# 4. boolean operators
-
-class And(_expbool__c):
-  __slots__ = ()
-  def __init__(self, *args):
-    _expbool__c.__init__(self, args)
-  def _compute__(self, values):
-    return all(values)
-  def _get_expected__(self, el, idx, expected):
-    if(expected is True): return True
-    else: return None
-
-class Or(_expbool__c):
-  __slots__ = ()
-  def __init__(self, *args):
-    _expbool__c.__init__(self, args)
-  def _compute__(self, values):
-    return any(values)
-  def _get_expected__(self, el, idx, expected):
-    if(expected is not False): return None
-    else: return False
-
-class Not(_expbool__c):
-  __slots__ = ()
-  def __init__(self, arg):
-    _expbool__c.__init__(self, (arg,))
-  def _compute__(self, values):
-    return not values[0]
-  def _get_expected__(self, el, idx, expected):
-    if(expected is True): return False
-    elif(expected is False): return True
-    else: return None
-
-class Xor(_expbool__c):
-  __slots__ = ()
-  def __init__(self, *args):
-    _expbool__c.__init__(self, args)
-  def _compute__(self, values):
-    res = False
-    for element in values:
-      if(element):
-        if(res): return False
-        else: res = True
-    return res
-  def _get_expected__(self, el, idx, expected):
-    return None
-
-class Conflict(_expbool__c):
-  __slots__ = ()
-  def __init__(self, *args):
-    _expbool__c.__init__(self, args)
-  def _compute__(self, values):
-    res = False
-    for element in values:
-      if(element):
-        if(res): return False
-        else: res = True
-    return True
-  def _get_expected__(self, el, idx, expected):
-    return None
-
-class Implies(_expbool__c):
-  __slots__ = ()
-  def __init__(self, left, right):
-    _expbool__c.__init__(self, (left, right,))
-  def _compute__(self, values):
-    return ((not values[0]) or values[1])
-  def _get_expected__(self, el, idx, expected):
-    return None
-
-class Iff(_expbool__c):
-  __slots__ = ()
-  def __init__(self, left, right):
-    _expbool__c.__init__(self, (left, right,))
-  def _compute__(self, values):
-    return (values[0] == values[1])
-  def _get_expected__(self, el, idx, expected):
-    return None
+  def __bool__(self): return (self.value() and self.m_nvalue)
 
 
 ################################################################################
@@ -691,7 +254,6 @@ def set_default_product_normalization(f):
   _default_product_normalization = f
 
 
-
 ##########################################
 # 1. core implementation
 
@@ -706,7 +268,7 @@ class _fd__c(object):
     "m_lookup",     # mapping {name: [(feature_obj, path)]}: the keys are all the feature/attributes names in the current tree, and the list are all the elements having that name, with their relative path (in tuple format)
     "m_dom",        # mapping {feature_obj -> path}: lists all the features/attributes in the current, and give their path (in string format)
     # the following field is only used at the root feature of a FD during its evaluation
-    "m_errors"      # a _reason_tree__c object listing all the errors encountered during the evaluation of the FD
+    "m_errors"      # a reason_tree__c object listing all the errors encountered during the evaluation of the FD
   )
 
   ##########################################
@@ -779,7 +341,7 @@ class _fd__c(object):
 
   def generate_lookup(self):
     if(self.m_lookup is None):
-      self.m_errors = _decl_errors__c()
+      self.m_errors = decl_errors__c()
       self.m_lookup = _lookup__c()
       self.m_dom    = {}
       self._generate_lookup_rec__([], 0, self.m_lookup, self.m_dom, self.m_errors)
@@ -788,7 +350,7 @@ class _fd__c(object):
   def link_constraint(self, c):
     if(self.m_lookup is None):
       raise ValueError(f"ERROR: a non-root feature cannot link a constraint (detected feature \"{self}\").\nDid you forget to call \"generate_lookup\"?")
-    errors = _decl_errors__c()
+    errors = decl_errors__c()
     c = _expbool__c._manage_parameter__(c)
     res = c._check_declarations__(self.m_dom[self], self.m_lookup, errors)
     return (res, errors)
@@ -796,21 +358,22 @@ class _fd__c(object):
   def link_configuration(self, conf):
     if(self.m_lookup is None):
       raise ValueError(f"ERROR: a non-root feature cannot link a configuration (detected feature \"{self}\").\nDid you forget to call \"generate_lookup\"?")
-    errors = _decl_errors__c()
+    errors = decl_errors__c()
     res = self._link_configuration__(conf, errors)
     return (res, errors)
 
   def close_configuration(self, *confs):
     if(self.m_lookup is None):
       raise ValueError(f"ERROR: a non-root feature cannot close a configuration (detected feature \"{self}\").\nDid you forget to call \"generate_lookup\"?")
-    errors = _decl_errors__c()
+    errors = decl_errors__c()
     is_true_d = {}
+    names = {}
     for i, conf in enumerate(confs):
-      if(not isinstance(conf, _configuration__c)):
-        conf = self._link_configuration__(conf, errors)
-      else: assert(conf.m_fm is self)
+      conf = self._link_configuration__(conf, errors)
       conf_dict = conf.m_dict
-      for k, v in conf_dict.items(): is_true_d[k] = (v, i)
+      for k, v in conf_dict.items():
+        is_true_d[k] = (v, i)
+        names[k] = conf.m_names.get(k, k)
     self._close_configuration_1__(is_true_d)
     # print("=====================================")
     # print("is_true_d")
@@ -820,7 +383,7 @@ class _fd__c(object):
     v_local = is_true_d.get(self, _empty__)
     if(v_local is _empty__): self._close_configuration_2__(False, is_true_d, res)
     else: self._close_configuration_2__(v_local[0], is_true_d, res)
-    return (_configuration__c(res, self), errors)
+    return (configuration__c(res, self.m_lookup, names), errors)
 
   ##########################################
   # call API
@@ -854,13 +417,13 @@ class _fd__c(object):
     if(self.m_name is not None):
       nvalue_local = conf.get(self, _empty__)
       if(nvalue_local is _empty__): # should never occur
-        reason = _reason_tree__c(self, 0)
+        reason = reason_tree__c(self, 0)
         reason.add_reason_value_none(self)
       elif((not nvalue_local) and snodes):
-        reason = _reason_tree__c(self, 0)
+        reason = reason_tree__c(self, 0)
         reason.add_reason_dependencies(self, snodes)
       elif(nvalue_local and (not nvalue_sub)):
-        reason = _reason_tree__c(self, 0)
+        reason = reason_tree__c(self, 0)
         reason.add_reason_value_mismatch(self, True, False)
       elif(nvalue_local):
         snodes = snodes + (self,)
@@ -870,7 +433,7 @@ class _fd__c(object):
     value = value_subs and (reason is None)
 
     if((nvalue_local != expected) or (not value)):
-      if(reason is None): reason = _reason_tree__c(self, 0)
+      if(reason is None): reason = reason_tree__c(self, 0)
       if((nvalue_local != expected)):
         reason.add_reason_value_mismatch(self, nvalue_local, expected)
       for el in itertools.chain(results_content, result_att, result_ctc):
@@ -884,7 +447,7 @@ class _fd__c(object):
     else:
       nvalue = conf.get(self, _empty__)
       if(v is _empty__):
-        reason = _reason_tree__c(self, 0)
+        reason = reason_tree__c(self, 0)
         reason.add_reason_value_none(self)
         value = False
         nvalue = False
@@ -900,19 +463,19 @@ class _fd__c(object):
     value = conf.get(att, _empty__)
     if(value is _empty__):
       if(expected):
-        reason = _reason_tree__c(self, 0)
+        reason = reason_tree__c(self, 0)
         reason.add_reason_value_none(att)
-        return _eval_result__c(False, reason)
+        return eval_result__c(False, reason)
       else:
-        return _eval_result__c(False, None)
+        return eval_result__c(False, None)
     else:
       res = spec(value)
       if(expected == res):
-        return _eval_result__c(res, None)
+        return eval_result__c(res, None)
       else:
-        reason = _reason_tree__c(self, 0)
+        reason = reason_tree__c(self, 0)
         reason.add_reason_value_mismatch(att, res, expected)
-        return _eval_result__c(res, reason)
+        return eval_result__c(res, reason)
 
   ##########################################
   # internal: lookup generation
@@ -944,6 +507,10 @@ class _fd__c(object):
   # internal: configuration nf API
 
   def _link_configuration__(self, conf, errors):
+    if(isinstance(conf, configuration__c)):
+      if(conf.m_resolver is self.m_lookup):
+        return conf # already linked
+      conf = conf.unlink().m_dict
     if(self.m_norm is not None):
       conf = self.m_norm(self, conf)
     linked = {}
@@ -955,7 +522,7 @@ class _fd__c(object):
           names[key_resolved] = key
           key = key_resolved
       linked[key] = val
-    return _configuration__c(linked, self, names)
+    return configuration__c(linked, self.m_lookup, names)
 
   def _close_configuration_1__(self, is_true_d):
     idx, v_local, v_subs = self._infer_sv__(is_true_d)
