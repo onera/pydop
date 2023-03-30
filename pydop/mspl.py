@@ -25,13 +25,18 @@ from pydop.spl import SPL
 from pydop.utils import _empty__
 
 ###############################################################################
-# GENERIC MSPL DEFINITION
+# MSPL DEFINITION
 ###############################################################################
 
+def default_factory(spl_id, *args, **kwargs):
+  return SPL(*args, **kwars)
+
+
+
 class MSPL(object):
-  __slots__ = ("m_spl_cls", "m_reg",)
-  def __init__(self, spl_cls=SPL):
-    self.m_spl_cls = spl_cls
+  __slots__ = ("m_spl_factory", "m_reg",)
+  def __init__(self, spl_factory=default_factory):
+    self.m_spl_factory = spl_factory
     self.m_reg = {}
 
   def _check_name__(self, name):
@@ -41,7 +46,7 @@ class MSPL(object):
   ## spl creation
   def new(self, spl_id, *args, **kwargs):
     self._check_name__(spl_id)
-    res = self.m_spl_cls(*args, **kwargs)
+    res = self.m_spl_factory(spl_id, *args, **kwargs)
     return self._add__(spl_id, res)
 
   def add(self, spl_id, spl):
@@ -80,6 +85,9 @@ class MSPL(object):
         res = spl(conf)
     return res
 
+
+##########################################
+# SPL wrapper that stores variants
 
 class _wrapper__c(object):
   __slots__ = ("m_obj", "m_reg",)
