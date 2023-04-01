@@ -20,6 +20,10 @@
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
+import itertools
+
+from pydop.utils import _path_to_str__
+
 ################################################################################
 # error reporting
 ################################################################################
@@ -77,15 +81,20 @@ class decl_errors__c(object):
 
   def add_unbound(self, name, path=None):
     self.m_unbounds.append(_unbound__c(name, path))
+    return self
   def add_ambiguous(self, name, path, paths):
     self.m_unbounds.append(_ambiguous__c(name, path, paths))
+    return self
   def add_duplicate(self, path, obj_main, obj_other):
     ref = self.m_duplicates.get(path)
     if(ref is None):
       self.m_duplicates[path] = _duplicate__c(path, obj_main, obj_other)
     else:
       ref.add(obj_main)
+    return self
 
+  def __iter__(self):
+    return itertools.chain(iter(self.m_unbounds), iter(self.m_ambiguities), iter(self.m_duplicates.values()))
   def __bool__(self):
     return bool(self.m_unbounds) or bool(self.m_ambiguities) or bool(self.m_duplicates)
   def __str__(self):
@@ -174,16 +183,20 @@ class reason_tree__c(object):
   def add_reason_value_mismatch(self, ref, val, expected=None):
     self.m_local.append(_reason_value_mismatch__c(ref, val, expected))
     self.m_count += 1
+    return self
   def add_reason_value_none(self, ref):
     self.m_local.append(_reason_value_none__c(ref))
     self.m_count += 1
+    return self
   def add_reason_dependencies(self, ref, deps):
     self.m_local.append(_reason_dependencies__c(ref, deps))
     self.m_count += 1  
+    return self
   def add_reason_sub(self, sub):
     if((isinstance(sub, eval_result__c)) and (sub.m_reason is not None) and (bool(sub.m_reason))):
       self.m_subs.append(sub.m_reason)
       self.m_count += 1
+    return self
 
   def update_ref(self, updater):
     self.m_ref = updater(self.m_ref)
@@ -195,19 +208,21 @@ class reason_tree__c(object):
       return ""
     elif(self.m_count == 1):
       if(self.m_local):
-        return f"{indent}{self.m_ref}: {self.m_local[0]}\n"
+        return f"{indent}{self.m_ref}: {self.m_local[0]}"
       else:
-        return f"{indent}{self.m_ref}: {self.m_subs[0]._tostring__(indent)}\n"
+        return f"{indent}{self.m_ref}: {self.m_subs[0]._tostring__(indent)}"
     else:
       res = f"{indent}{self.m_ref}: (\n"
       indent_more = f"{indent} "
       for e in self.m_local:
         res += f"{indent_more}{e}\n"
       for s in self.m_subs:
-        res += s._tostring__(indent_more)
-      res += f"{indent})\n"
+        res += s._tostring__(indent_more) + "\n"
+      res += f"{indent})"
       return res
 
+  def __len__(self): return self.m_count
+  def __iter__(self): return itertools.chain(iter(self.m_local), iter(self.m_subs))
   def __bool__(self): return (self.m_count != 0)
   def __str__(self): return self._tostring__("")
 

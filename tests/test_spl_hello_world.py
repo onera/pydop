@@ -22,6 +22,7 @@
 
 
 from pydop.spl import SPL, RegistryGraph
+from pydop.fm_constraint import *
 from pydop.fm_diagram import *
 from pydop.operations.modules import VariantModules, VariantModule, register_modules, unregister_modules
 
@@ -46,7 +47,9 @@ def get_fm():
   )
 
 
-def module_single():
+def test_module_single():
+  print("==========================================")
+  print("= test_module_single")
 
   hello_world_fm = get_fm()
 
@@ -155,15 +158,11 @@ def module_single():
 
 
 
-def module_multiple():
-  hello_world_fm = FD("HelloWorld",
-    FDAnd(
-      FD("lang", lang_v=Enum(Hello)),
-    ),
-    FDAny(
-      FD("times", times_v=Int(1,None))
-    )
-  )
+def test_module_multiple():
+  print("==========================================")
+  print("= test_module_multiple")
+
+  hello_world_fm = get_fm()
 
   spl = SPL(hello_world_fm, RegistryGraph(), VariantModules("hw"))
 
@@ -276,7 +275,7 @@ def module_multiple():
 
 
 if(__name__ == "__main__"):
-  module_single()
-  module_multiple()
+  test_module_single()
+  test_module_multiple()
 
 

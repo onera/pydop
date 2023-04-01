@@ -21,7 +21,10 @@
 # email: michael.lienhardt@onera.fr
 
 
+import itertools
+
 from pydop.utils import _empty__
+from pydop.fm_result import decl_errors__c
 
 
 ################################################################################
@@ -44,8 +47,7 @@ class configuration__c(object):
     res = self.m_dict.get(key, _empty__)
     if(res is _empty__):
       if(isinstance(key, str) and (self.m_resolver is not None)):
-        key_path = _path_from_str__(key)
-        key_resolved = self.m_resolver.resolve(key_path, errors, None)
+        key_resolved = self.m_resolver(key, errors, None)
         if(key_resolved is not None):
           return self.m_dict.get(key_resolved, default)
     return res
@@ -78,9 +80,12 @@ class configuration__c(object):
   ## basic manipulation
 
   def __eq__(self, other):
-    if(isinstance(other, _configuration__c)):
+    if(isinstance(other, configuration__c)):
       return ((self.m_dict == other.m_dict) and (self.m_resolver == other.m_resolver))
     return False
+
+  def __hash__(self):
+    return hash(frozenset((k,v) for k,v in itertools.chain(self.m_dict.items(), self.m_names.items())))
 
   def __str__(self):
     return str(self.unlink().m_dict)

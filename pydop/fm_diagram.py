@@ -24,13 +24,21 @@ import itertools
 import enum
 
 from pydop.fm_result import decl_errors__c, reason_tree__c, eval_result__c
-from pydop.utils import _empty__
+from pydop.fm_constraint import _expbool__c, Var, Lit
+from pydop.fm_configuration import configuration__c
+
+from pydop.utils import _empty__, _path_from_str__
 
 
+def _manage_parameter__(param):
+  if(isinstance(param, str)):
+    return Var(param)
+  elif(isinstance(param, bool)):
+    return Lit(param)
+  else:
+    return param
 
 
-def _path_to_str__(path): return ("None" if(path is None) else "/".join(path))
-def _path_from_str__(s): return s.split('/')
 
 
 ################################################################################
@@ -73,17 +81,15 @@ class _lookup__c(object):
         return refs[0][0]
     return default
 
+  def get_with_path(self, path, suffix, errors, default=None):
+    path = path + _path_from_str__(suffix)
+    return self.get(path, errors, default)
+
   def resolve(self, key, errors, default=None):
-    key_path = None
-    if(isinstance(key, str)):
+    try:
       key_path = _path_from_str__(key)
-    else if(isinstance(key, (list, tuple))):
-      valid = all(map((lambda e: isinstance(e, str)), key))
-      if(valid):
-        key_path = key
-    if(key_path is not None):
       return self.get(key_path, errors, default)
-    else:
+    except ValueError:
       return default
 
 
@@ -302,10 +308,11 @@ class _fd__c(object):
     for el in args:
       if(isinstance(el, _fd__c)):
         content.append(el)
-      elif(isinstance(el, _expbool__c)):
-        ctcs.append(el)
+      # elif(isinstance(el, _expbool__c)):
+        # ctcs.append(el)
       else:
-        raise Exception(f"ERROR: unexpected FD subtree (found type \"{el.__class__.__name__}\")")
+        ctcs.append(_manage_parameter__(el))
+        # raise Exception(f"ERROR: unexpected FD subtree (found type \"{el.__class__.__name__}\")")
     return name, content, ctcs, attributes
 
   ##########################################
@@ -352,7 +359,7 @@ class _fd__c(object):
       raise ValueError(f"ERROR: a non-root feature cannot link a constraint (detected feature \"{self}\").\nDid you forget to call \"generate_lookup\"?")
     errors = decl_errors__c()
     c = _expbool__c._manage_parameter__(c)
-    res = c._check_declarations__(self.m_dom[self], self.m_lookup, errors)
+    res = c._link__(self.m_dom[self], self.m_lookup, errors)
     return (res, errors)
 
   def link_configuration(self, conf):
@@ -383,7 +390,7 @@ class _fd__c(object):
     v_local = is_true_d.get(self, _empty__)
     if(v_local is _empty__): self._close_configuration_2__(False, is_true_d, res)
     else: self._close_configuration_2__(v_local[0], is_true_d, res)
-    return (configuration__c(res, self.m_lookup, names), errors)
+    return (configuration__c(res, self.m_lookup.resolve, names), errors)
 
   ##########################################
   # call API
@@ -404,7 +411,7 @@ class _fd__c(object):
 
     results_content = tuple(f_get(el, conf, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
     result_att = tuple(self._manage_attribute__(el, conf, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_attributes))
-    result_ctc = tuple(_expbool__c._eval_generic__(el, conf, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_ctcs))
+    result_ctc = tuple(el(conf, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_ctcs))
 
     nvalue_subs  = tuple(itertools.chain((el.m_nvalue for el in results_content), (el.m_value for resu in (result_att, result_ctc) for el in resu)))
     nvalue_local = None
@@ -499,7 +506,7 @@ class _fd__c(object):
       # _fd__c._check_duplicate__(att_def, att_def[0], local_path, lookup, errors)
       dom[att_def] = att_path
     # 4. check ctcs
-    self.m_ctcs = tuple(ctc._check_declarations__(local_path, lookup, errors) for ctc in self.m_ctcs)
+    self.m_ctcs = tuple(ctc._link__(local_path, lookup, errors) for ctc in self.m_ctcs)
     # 5. reset path_to_self
     path_to_self.pop()
 
@@ -522,7 +529,7 @@ class _fd__c(object):
           names[key_resolved] = key
           key = key_resolved
       linked[key] = val
-    return configuration__c(linked, self.m_lookup, names)
+    return configuration__c(linked, self.m_lookup.resolve, names)
 
   def _close_configuration_1__(self, is_true_d):
     idx, v_local, v_subs = self._infer_sv__(is_true_d)

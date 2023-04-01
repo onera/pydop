@@ -60,14 +60,14 @@ class MSPL(object):
   def _add__(self, spl_id, spl):
     res = _wrapper__c(spl)
     self.m_reg[spl_id] = res
-    self.m_reg[spl] = res
+    self.m_reg[res] = res
     return res
 
   ## getters
-  def get(self, spl_id, default=None):
+  def get_spl(self, spl_id, default=None):
     return self.m_reg.get(key, default)
 
-  def get(self, spl_id, conf, default=None):
+  def get_variant(self, spl_id, conf, default=None):
     global _empty__
     spl = self.m_reg.get(key, _empty__)
     if(spl is not _empty__):
@@ -97,8 +97,10 @@ class _wrapper__c(object):
 
   def __call__(self, conf, core=None):
     global _empty__
-    conf = self.m_obj.close_configuration(conf)
-    key = tuple(sorted(conf.items()))
+    conf, errors = self.m_obj.close_configuration(conf)
+    if(bool(errors)):
+      raise ValueError(errors)
+    key = tuple(sorted(conf.items(), key=(lambda e: id(e[0]))))
     res = self.m_reg.get(key, _empty__)
     if(res is _empty__):
       res = self.m_obj(conf, core)

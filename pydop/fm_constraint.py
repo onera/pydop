@@ -47,7 +47,8 @@ class _expbool__c(object):
 
   def __call__(self, product, idx=None, expected=True):
     # print(f"{self.__class__.__name__}.__call__({product}, {idx}, {expected})")
-    results = tuple(_expbool__c._eval_generic__(el, product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
+    # results = tuple(_expbool__c._eval_generic__(el, product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
+    results = tuple(el(product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
     values = tuple(el.value() for el in results)
     # print(f"  => values  = {values}")
     res = self._compute__(values)
@@ -61,12 +62,12 @@ class _expbool__c(object):
         reason.add_reason_sub(r)
     return eval_result__c(res, reason)
  
-  @staticmethod
-  def _eval_generic__(el, product, i, expected):
-    if(isinstance(el, _expbool__c)):
-      return el(product, i, expected)
-    else:
-      return product.get(el, el)
+  # @staticmethod
+  # def _eval_generic__(el, product, i, expected):
+  #   if(isinstance(el, _expbool__c)):
+  #     return el(product, i, expected)
+  #   else:
+  #     return product.get(el, el)
 
   @staticmethod
   def _manage_parameter__(param):
@@ -77,8 +78,8 @@ class _expbool__c(object):
     else:
       return Lit(param)
 
-  def _check_declarations__(self, path, mapping, errors):
-    res = _expbool__c(tuple(map((lambda sub: sub._check_declarations__(path, mapping, errors)), self.m_content)))
+  def _link__(self, path, mapping, errors):
+    res = _expbool__c(tuple(map((lambda sub: sub._link__(path, mapping, errors)), self.m_content)))
     res.__class__ = self.__class__
     return res
 
@@ -140,8 +141,8 @@ class Var(_expbool__c):
     return eval_result__c(res, reason)
   def __str__(self): return f"Var({self.m_content})"
 
-  def _check_declarations__(self, path, lookup, errors):
-    return Var(lookup.get(path + _path_from_str__(self.m_content), errors, self.m_content))
+  def _link__(self, path, resolver, errors):
+    return Var(resolver.get_with_path(path, self.m_content, errors, self.m_content))
 
   def _vars_update(self, s):
     s.add(self.m_content)
@@ -156,7 +157,7 @@ class Lit(_expbool__c):
     return eval_result__c(self.m_content, None)
   def __str__(self): return f"Lit({self.m_content})"
 
-  def _check_declarations__(self, path, mapping, errors):
+  def _link__(self, path, mapping, errors):
     return self
 
   def _vars_update(self, s): pass

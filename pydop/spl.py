@@ -40,20 +40,20 @@ from pydop.fm_constraint import Lit
 
 # for constraints
 
-class constraint__proto(typing.Protocol):
-  def __call__(self, p: typing.Union[dict, configuration__c]) -> eval_result__c: pass
+# class constraint__proto(typing.Protocol):
+#   def __call__(self, p: typing.Union[dict, configuration__c]) -> eval_result__c: pass
 
-# for feature models
+# # for feature models
 
 
-T = typing.TypeVar('T')
-class feature_model_proto(typing.Protocol):
-  # declaration part
-  def check(self) -> decl_errors__c: pass
-  def link_constraint(self, c: constraint__proto ) -> tuple[constraint__proto, decl_errors__c]: pass
-  def link_configuration(self, p: typing.Union[dict, configuration__c]) -> tuple[configuration__c, decl_errors__c]: pass
-  # check part
-  def __call__(self, p: typing.Union[dict, configuration__c]) -> eval_result__c
+# T = typing.TypeVar('T')
+# class feature_model_proto(typing.Protocol):
+#   # declaration part
+#   def check(self) -> decl_errors__c: pass
+#   def link_constraint(self, c: constraint__proto ) -> tuple[constraint__proto, decl_errors__c]: pass
+#   def link_configuration(self, p: typing.Union[dict, configuration__c]) -> tuple[configuration__c, decl_errors__c]: pass
+#   # check part
+#   def __call__(self, p: typing.Union[dict, configuration__c]) -> eval_result__c
 
 
 
@@ -67,7 +67,6 @@ class SPL(object):
   __slots__ = ("m_fm", "m_core", "m_reg",)
 
   def __init__(self, fm, dreg, core=None):
-    if(isinstance(fm, bool)): fm = Lit(fm)
     errors = fm.check()
     if(bool(errors)):
       raise ValueError(errors)
@@ -75,27 +74,15 @@ class SPL(object):
     self.m_reg = dreg
     self.m_core = core
 
-  ## forward calls to the feature model
 
   def link_constraint(self, c):
     return self.m_fm.link_constraint(c)
-    # if(self.m_is_fm): return self.m_fm.link_constraint(c)
-    # else: return (c, _decl_errors__c())
 
   def link_configuration(self, conf):
     return self.m_fm.link_configuration(conf)
-    # if(self.m_is_fm): return self.m_fm.link_configuration(conf)
-    # else: return (_configuration__c(conf, None), _decl_errors__c())
 
   def close_configuration(self, *confs):
     return self.m_fm.close_configuration(*confs)
-    # if(self.m_is_fm): return self.m_fm.close_configuration(*confs)
-    # else:
-    #   res = {}
-    #   for conf in confs:
-    #     for k,v in conf.items():
-    #       res[k] = v
-    #   return (_configuration__c(res, None), _decl_errors__c())  
 
   def __call__(self, conf, core=None):
     if(not isinstance(conf, configuration__c)):
