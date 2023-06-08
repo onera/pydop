@@ -153,7 +153,7 @@ class _replace_original__c(ast.NodeTransformer):
     else:
       return node
 
-  def __call__(self, function):
+  def __call__(self, function, nonlocals):
     self.m_name_original = function.__name__
     source = inspect.getsource(function)
     source = textwrap.dedent(source)
@@ -165,7 +165,7 @@ class _replace_original__c(ast.NodeTransformer):
     else:
       name_original = self.m_name_new
       ast.fix_missing_locations(node)
-      exec(compile(node, '<ast>', 'exec'))
+      exec(compile(node, '<ast>', 'exec'), globals() | nonlocals, locals())
       function = locals()[self.m_name_original]
     return function, name_original
 
@@ -293,7 +293,8 @@ class _wrapper__c(object):
       value = param2
     if(_hasattr_no_follow__(self.m_obj, name)):
       if(inspect.isfunction(value)):
-        value, name_original = _replace_original__c(self.m_reg)(value)
+        # print("modify", value.__name__, ":", inspect.getclosurevars(value).nonlocals)
+        value, name_original = _replace_original__c(self.m_reg)(value, inspect.getclosurevars(value).nonlocals)
         if(name_original != name):
           setattr(self.m_obj, name_original, getattr(self.m_obj, name))
       setattr(self.m_obj, name, value) 

@@ -670,9 +670,10 @@ class FDXor(_fd__c):
     return idx_local, v_local, v_subs
 
 ##########################################
-# 3. FD singleton
+# 3. FD aliases
 
 class FD(FDAnd): pass
 class FDMandatory(FDAnd): pass
 class FDOptional(FDAny): pass
+class FDAlternative(FDXor): pass
 
