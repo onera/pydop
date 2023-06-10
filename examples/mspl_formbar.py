@@ -20,6 +20,14 @@
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
+"""
+This file implements the FormbaR Statechart Multi-Product Line described in
+ [1] Ferruccio Damiani, Reiner Hähnle, Eduard Kamburjan, Michael Lienhardt, and Luca Paolini.
+     2023. Variability modules.
+     In J. Syst. Softw. 195 (2023), 111510.
+     https://doi.org/10.1016/j.jss.2022.111510
+"""
+
 
 from pydop.spl import SPL, RegistryGraph
 from pydop.mspl import MSPL

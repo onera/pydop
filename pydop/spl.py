@@ -64,15 +64,15 @@ from pydop.fm_constraint import Lit
 
 class SPL(object):
 
-  __slots__ = ("m_fm", "m_core", "m_reg",)
+  __slots__ = ("m_fm", "m_bm_factory", "m_reg",)
 
-  def __init__(self, fm, dreg, core=None):
+  def __init__(self, fm, dreg, bm_factory=None):
     errors = fm.check()
     if(bool(errors)):
       raise ValueError(errors)
     self.m_fm = fm
     self.m_reg = dreg
-    self.m_core = core
+    self.m_bm_factory = bm_factory
 
 
   def link_constraint(self, c):
@@ -84,16 +84,16 @@ class SPL(object):
   def close_configuration(self, *confs):
     return self.m_fm.close_configuration(*confs)
 
-  def __call__(self, conf, core=None):
+  def __call__(self, conf, bm=None):
     if(not isinstance(conf, configuration__c)):
       conf, errors = self.close_configuration(conf)
       if(bool(errors)):
         raise ValueError(errors)
     is_product = self.m_fm(conf)
     if(bool(is_product)):
-      variant = core
-      if((variant is None) and (self.m_core is not None)):
-        variant = self.m_core.new_instance()
+      variant = bm
+      if((variant is None) and (self.m_bm_factory is not None)):
+        variant = self.m_bm_factory()
 
       for delta_f, guard, nb_args in self.m_reg:
         act = guard(conf)

@@ -20,6 +20,14 @@
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
+"""
+This file implements the Expression Product Line described in
+ [1] Ina Schaefer, Lorenzo Bettini, Viviana Bono, Ferruccio Damiani, and Nico Tanzarella.
+     2010. Delta-Oriented Programming of Software Product Lines.
+     In Software Product Lines: Going Beyond (SPLC 2010) (LNCS, Vol. 6287). 77–91.
+     https://doi.org/10.1007/978-3-642-15579-6_6
+"""
+
 
 from pydop.spl import SPL, RegistryGraph
 from pydop.fm_constraint import *

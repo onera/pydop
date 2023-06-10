@@ -37,6 +37,234 @@ import ast
 import textwrap
 
 
+
+##########################################
+# wrapper utils
+
+class wrapper_cls(object):
+  __slots__ = ("m_content")
+
+def unwrap(el):
+  while(issubclass(type(el), wrapper_cls)):
+    el = el.m_content
+  return el
+
+
+################################################################################
+# Variant
+################################################################################
+
+Module = type(importlib)
+
+################################################################################
+# DELTA OPERATIONS
+################################################################################
+
+_obj__ = object()
+
+def hasattr_static(obj, name):
+  global _obj__
+  return (inspect.getattr_static(obj, name, default=_obj__) is not _obj__)
+
+def add(obj):
+  def res(param1, param2=_obj__):
+    global _obj__
+    nonlocal obj
+    if(param2 == _obj__):
+      name  = param1.__name__
+      value = param1
+    else:
+      name  = param1
+      value = param2
+  
+    obj = unwrap(obj)
+    value = unwrap(value)
+    if(hasattr_static(obj, name)):
+      name_kind = obj.__class__.__name__
+      name_obj  = obj.__name__
+      raise Exception(f"ERROR: {name_kind} {name_obj} already has an element named {name}")
+    else:
+      setattr(obj, name, value)
+  return res
+
+def remove(obj, name):
+  obj = unwrap(obj)
+  if(hasattr_static(obj, name)):
+    delattr(obj, name)
+  else:
+    name_kind = obj.__class__.__name__
+    name_obj  = obj.__name__
+    raise Exception(f"ERROR: {name_kind} {name_obj} has no element named {name}")
+
+def modify(obj):
+  def res(param1, param2=_obj__):
+    global _obj__
+    global original_replacer
+    nonlocal obj
+    if(param2 == _obj__):
+      name  = param1.__name__
+      value = param1
+    else:
+      name  = param1
+      value = param2
+
+    obj = unwrap(obj)
+    value = unwrap(value)
+
+    if(hasattr_static(obj, name)):
+      if(inspect.isfunction(value)):
+        # print("modify", value.__name__, ":", inspect.getclosurevars(value).nonlocals)
+        value, name_original = original_replacer(obj, name, value, inspect.getclosurevars(value).nonlocals)
+        if(name_original != name):
+          setattr(obj, name_original, getattr(obj, name))
+      setattr(obj, name, value) 
+    else:
+      name_kind = obj.__class__.__name__
+      name_obj  = obj.__name__
+      raise Exception(f"ERROR: {name_kind} {name_obj} has no element named {name}")
+  return res
+
+
+def add_extends(obj):
+  obj = unwrap(obj)
+  if(inspect.isclass(obj)):
+    def res(*bases):
+      nonlocal obj
+      bases = map(unwrap, bases)
+      bases = tuple(filter(lambda x: x not in obj.__bases__, bases))
+      obj.__bases__ += bases
+    return res
+  else:
+    raise Exception(f"ERROR: delta operation \"add_extends\" can only be applied on classes (\"{type(obj)}\" found)")
+
+
+def remove_extends(obj):
+  obj = unwrap(obj)
+  if(inspect.isclass(obj)):
+    def res(*bases):
+      nonlocal obj
+      bases_rm = frozenset(map(unwrap, bases))
+      bases = frozenset(obj.__bases__)
+      bases_error = bases_rm - bases
+      if(bases_error):
+        raise Exception(f"ERROR: trying to remove non-superclasses {bases_error}")
+      else:
+        obj.__bases__ = tuple(el for el in obj.__bases__ if(el not in bases_rm))
+    return res
+  else:
+    raise Exception(f"ERROR: delta operation \"remove_extends\" can only be applied on classes (\"{type(obj)}\" found)")
+
+def set_extends(obj):
+  obj = unwrap(obj)
+  if(inspect.isclass(obj)):
+    def res(*bases):
+      nonlocal obj
+      bases = tuple(map(unwrap, bases))
+      self.m_obj.__bases__ = bases
+    return res
+  else:
+    raise Exception(f"ERROR: delta operation \"set_extends\" can only be applied on classes (\"{type(obj)}\" found)")
+
+
+
+##########################################
+# original function call replacer
+
+class _original_replacer_cls(ast.NodeTransformer):
+  __slots__ = ("m_obj", "name_original", "m_obj_name", "m_name_new",)
+  def __init__(self):
+    ast.NodeTransformer.__init__(self)
+
+  def visit_Name(self, node):
+    if(node.id == "original"):
+      return ast.Attribute(value=ast.Name(id=self.m_obj_name, ctx=ast.Load()), attr=self.name_new, ctx=ast.Load())
+      # if(inspect.isclass(self.m_obj)):
+      #   return ast.Attribute(value=ast.Name(id='self', ctx=ast.Load()), attr=self.m_name_new, ctx=ast.Load())
+      # else:
+      #   return ast.Name(id=self.m_name_new, ctx=ast.Load())
+    else:
+      return node
+
+  def visit_Attribute(self, node):
+    if((node.attr == "original") and ((type(node.value) == ast.Name) and (node.value.id == "self"))):
+      return ast.Attribute(value=node.value, attr=self.name_new, ctx=ast.Load())
+    else:
+      return node
+
+  def __call__(self, obj, name, function, nonlocals):
+    self.m_obj = obj
+    self.name_original = name
+    self.m_name_new = None
+    # self.m_qualast  = None
+
+    exec_env = self.create_exec_env(nonlocals)
+
+    function_name = function.__name__
+    function_namefile = inspect.getfile(function)
+    function_lines, function_start_lineno = inspect.getsourcelines(function)
+    # remove the @ decorations
+    function_start = 0
+    while(function_lines[function_start].lstrip()[0] == '@'):
+      function_start += 1
+    source = "".join(function_lines[function_start:])
+    source = textwrap.dedent(source)
+
+    node = ast.parse(source)
+    ast.increment_lineno(node, function_start_lineno + function_start - 1) # setup the correct line number
+    node = self.visit(node)
+
+    if(self.m_name_new is None): name_original = self.name_original
+    else: name_original = self.m_name_new
+
+    ast.fix_missing_locations(node)
+    exec(compile(node, function_namefile, 'exec'), exec_env, locals())
+    function = locals()[function_name]
+    return function, name_original
+
+  @property
+  def name_new(self):
+    if(self.m_name_new is None):
+      count = 0
+      self.m_name_new = f"{self.name_original}#{count}"
+      while(hasattr_static(self.m_obj, self.m_name_new)):
+        count += 1
+        self.m_name_new = f"{self.name_original}#{count}"
+    return self.m_name_new
+
+  @property
+  def qualast(self):
+    if(self.m_qualast is None):
+      if(hasattr_static(self.m_obj, "__qualname__")):
+        tmp = self.m_obj.__qualname__
+      else:
+        tmp = self.m_obj.__name__
+      quallist = tmp.split('.')
+      print("replacing original with ", tmp)
+      self.m_qualast = ast.Name(id=quallist[0], ctx=ast.Load())
+      for attr in quallist[1:]:
+        self.m_qualast = ast.Attribute(value=self.m_qualast, attr=attr, ctx=ast.Load())
+    return self.m_qualast
+
+  def create_exec_env(self, nonlocals):
+    exec_env = globals() | nonlocals
+    exec_env_keys = frozenset(exec_env.keys())
+    self.m_obj_name = " "
+    while(self.m_obj_name in exec_env_keys):
+      self.m_obj_name += " "
+    exec_env[self.m_obj_name] = self.m_obj
+    return exec_env
+
+
+original_replacer = _original_replacer_cls()
+
+
+
+
+
+
+
+
+
 ################################################################################
 # information lookup in python modules
 ################################################################################
@@ -85,7 +313,7 @@ class VariantModules(object):
         raise Exception(f"ERROR: module \"{name}\" already declared")
       self.m_content[name] = module
 
-  def new_instance(self):
+  def __call__(self):
     variant = VariantModulesInstance()
     variant.__dict__ = dict(self.m_content)
     reg = _registry__c(variant)
@@ -100,12 +328,16 @@ class VariantModule(object):
   def __init__(self, arg):
     self.m_module, _, _ = extract_module_and_name(arg)
 
-  def new_instance(self):
+  def __call__(self):
     variant = type(self.m_module)(self.m_module.__name__, self.m_module.__doc__)
     variant.__dict__.update(self.m_module.__dict__)
     reg = _registry__c(variant)
     res = _wrapper__c(reg, None, None, variant)
     return res
+
+
+
+
 
 ################################################################################
 # registering and unregistering modules
@@ -135,6 +367,10 @@ def unregister_modules(obj):
     for sub in obj.__dict__.values():
       unregister_modules(sub)
 
+
+def register_module(obj):
+  sys.modules[obj.__name__] = obj
+
 ################################################################################
 # original function call replacer
 ################################################################################
@@ -149,7 +385,8 @@ class _replace_original__c(ast.NodeTransformer):
   def visit_Name(self, node):
     if(node.id == "original"):
       self.m_name_new = self.m_instance._get_original_name__(self.m_name_original)
-      return ast.Attribute(value=ast.Name(id='self', ctx=ast.Load()), attr=self.m_name_new, ctx=ast.Load())
+      # return ast.Attribute(value=ast.Name(id='self', ctx=ast.Load()), attr=self.m_name_new, ctx=ast.Load())
+      return ast.Name(id=self.m_name_new, ctx=ast.Load())
     else:
       return node
 
@@ -216,7 +453,6 @@ class _registry__c(object):
     self.m_original_count += 1
     return res
 
-_obj__ = object()
 
 def _hasattr_no_follow__(obj, name):
   try:
