@@ -36,6 +36,9 @@ Moreover, the sismic library requires to remove transitions before removing a st
 
 Moreover, we integrated a small tk GUI to control the clock.
 Seconds must be triggered manually.
+
+usage: run this file with the selected features in parameter.
+ example: `python3 spl_clock.py DisplayMode`
 """
 
 

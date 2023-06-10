@@ -43,10 +43,13 @@ import textwrap
 
 class wrapper_cls(object):
   __slots__ = ("m_content")
+  def __init__(self, content):
+    self.m_content = content
+  def get_content(self): return self.m_content
 
 def unwrap(el):
   while(issubclass(type(el), wrapper_cls)):
-    el = el.m_content
+    el = el.get_content()
   return el
 
 
