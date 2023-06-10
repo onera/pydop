@@ -25,6 +25,12 @@ This file contains
  - the class `SPL`, that implements Delta-Oriented SPLs
  - the class `RegistryGraph`, that implements delta-ordering for the [1] and [2] approaches to construct the Configuration Knowledge
  - the class `RegistryCategory` that orders delta w.r.t. to some user-defined categories
+[1] Dave Clarke, Radu Muschevici, José Proença, Ina Schaefer, and Rudolf Schlatte.
+    2010. Variability Modelling in the ABS Language.
+    In FMCO (LNCS, Vol. 6957). Springer, 204–224.
+[2] Ferruccio Damiani, Reiner Hähnle, Eduard Kamburjan, Michael Lienhardt, and Luca Paolini.
+    2023. Variability modules.
+    In J. Syst. Softw. 195 (2023), 111510.
 """
 
 import itertools
