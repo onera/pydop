@@ -44,12 +44,12 @@ import textwrap
 class wrapper_cls(object):
   __slots__ = ("m_content")
   def __init__(self, content):
-    self.m_content = content
-  def get_content(self): return self.m_content
+    object.__setattr__(self, "m_content", content)
+  def get_content(self): return object.__getattribute__(el, "m_content")
 
 def unwrap(el):
   while(issubclass(type(el), wrapper_cls)):
-    el = el.get_content()
+    el = object.__getattribute__(el, "get_content")()
   return el
 
 
@@ -65,9 +65,13 @@ Module = type(importlib)
 
 _obj__ = object()
 
-def hasattr_static(obj, name):
+def hasattr_static(obj, name): # inspect does not have a `hasattr_static` function
   global _obj__
   return (inspect.getattr_static(obj, name, default=_obj__) is not _obj__)
+
+def isclass(obj): # the `inspect` version does not work with wrappers
+  return issubclass(unwrap(obj.__class__), type)
+
 
 def add(obj):
   def res(param1, param2=_obj__):
@@ -80,8 +84,8 @@ def add(obj):
       name  = param1
       value = param2
   
-    obj = unwrap(obj)
-    value = unwrap(value)
+    # obj = unwrap(obj)
+    # value = unwrap(value)
     if(hasattr_static(obj, name)):
       name_kind = obj.__class__.__name__
       name_obj  = obj.__name__
@@ -111,8 +115,8 @@ def modify(obj):
       name  = param1
       value = param2
 
-    obj = unwrap(obj)
-    value = unwrap(value)
+    # obj = unwrap(obj)
+    # value = unwrap(value)
 
     if(hasattr_static(obj, name)):
       if(inspect.isfunction(value)):
@@ -129,8 +133,8 @@ def modify(obj):
 
 
 def add_extends(obj):
-  obj = unwrap(obj)
-  if(inspect.isclass(obj)):
+  # obj = unwrap(obj)
+  if(isclass(obj)):
     def res(*bases):
       nonlocal obj
       bases = map(unwrap, bases)
@@ -142,8 +146,8 @@ def add_extends(obj):
 
 
 def remove_extends(obj):
-  obj = unwrap(obj)
-  if(inspect.isclass(obj)):
+  # obj = unwrap(obj)
+  if(isclass(obj)):
     def res(*bases):
       nonlocal obj
       bases_rm = frozenset(map(unwrap, bases))
@@ -158,8 +162,8 @@ def remove_extends(obj):
     raise Exception(f"ERROR: delta operation \"remove_extends\" can only be applied on classes (\"{type(obj)}\" found)")
 
 def set_extends(obj):
-  obj = unwrap(obj)
-  if(inspect.isclass(obj)):
+  # obj = unwrap(obj)
+  if(isclass(obj)):
     def res(*bases):
       nonlocal obj
       bases = tuple(map(unwrap, bases))
@@ -262,10 +266,133 @@ original_replacer = _original_replacer_cls()
 
 
 
+################################################################################
+# wrapper around existing modules, to avoid copies
+################################################################################
+
+class wrapper_sharing_cls(wrapper_cls):
+  __slots__ = ("m_local_attr", "m_local_dict", "m_real", "m_parents",)
+
+  def __new__(cls, *args): # Necessary, when a wrapper is used as a superclass
+    # print(f"wrapper_sharing_cls.__new__({cls}, {args})")
+    # normal call
+    if((len(args) < 3)):
+      return super(wrapper_sharing_cls, cls).__new__(cls)
+    else:
+      # for i, arg in enumerate(args):
+      #   print(i, ":", type(arg), "=>", arg)
+      # call when it is a super class
+      name = args[0]
+      bases = tuple(unwrap(el) for el in args[1])
+      content = args[2]
+      return type(name, bases, content)
+  def __init__(self, content, parent=None):
+    # print(f"wrapper_sharing_cls.__init__({content}, {parent})")
+    global _obj__
+    wrapper_cls.__init__(self, content)
+    object.__setattr__(self, "m_parents", [] if(parent is None) else [parent])
+    object.__setattr__(self, "m_local_attr", {})
+    object.__setattr__(self, "m_local_dict", {})
+    object.__setattr__(self, "m_real", _obj__)
+  def __call__(self, *args, **kwargs): # forward calls: it is used during inheritance
+    # print(f"wrapper_sharing_cls.__call__({args}, {kwargs})")
+    return object.__getattribute__(self, "m_content")(*args, **kwargs)
+
+  def get_content(self):
+    global _obj__
+    if(object.__getattribute__(self, "m_real") is _obj__):
+      local_attr = object.__getattribute__(self, "m_local_attr")
+      local_dict = object.__getattribute__(self, "m_local_dict")
+      if(bool(local_attr) or bool(local_dict)):
+        content = object.__getattribute__(self, "m_content")
+        is_original = True
+        for key, val in local_attr.items():
+          val_real = unwrap(val)
+          if((not hasattr(content, key)) or (getattr(content, key) is not val_real)):
+            if(is_original):
+              content = copy.copy(content)
+              is_original = False
+            setattr(content, key, val_real)
+
+        for key, val in local_dict.items():
+          val_real = unwrap(val)
+          prev = content.get(key, _obj__)
+          if((prev is _obj__) or (prev is not val_real)):
+            if(is_original):
+              content = copy.copy(content)
+              is_original = False
+            content[key] = val_real
+
+        object.__setattr__(self, "m_real", content)
+      else:
+        object.__setattr__(self, "m_real", object.__getattribute__(self, "m_content"))
+    return object.__getattribute__(self, "m_real")
+
+  def __setattr__(self, name, value):
+    # print(f"wrapper_sharing_cls.__setattr__({name}, {value})")
+    global _obj__
+    # update local_attr
+    local_attr = object.__getattribute__(self, "m_local_attr")
+    prev = local_attr.get(name, _obj__)
+    if(prev is not _obj__):
+      object.__getattribute__(prev, "m_parents").remove(self) # this link between self and prev is broken
+    res = wrapper_sharing_ensure(value, self)
+    local_attr[name] = res
+    # reset real
+    object.__getattribute__(self, "_reset__")()
+    return res
+
+  def __getattribute__(self, name):
+    # print(f"wrapper_sharing_cls.__getattribute__({name})")
+    global _obj__
+    local_attr = object.__getattribute__(self, "m_local_attr")
+    res = local_attr.get(name, _obj__)
+    if(res is _obj__):
+      content = object.__getattribute__(self, "m_content")
+      res = getattr(content, name)
+      # possibly, content will be updated: need to store it locally
+      res = object.__getattribute__(self, "__setattr__")(name, res)
+    return res
+
+  def __setitem__(self, key, value):
+    global _obj__
+    local_dict = object.__getattribute__(self, "m_local_dict")
+    prev = local_dict.get(key, _obj__)
+    if(prev is not _obj__):
+      object.__getattribute__(prev, "m_parents").remove(self) # this link between self and prev is broken
+    res = wrapper_sharing_ensure(value, self)
+    local_dict[name] = res
+    # reset real
+    object.__getattribute__(self, "_reset__")()
+    return res
+
+  def __getitem__(self, key):
+    global _obj__
+    local_dict = object.__getattribute__(self, "m_local_dict")
+    res = local_dict.get(name, _obj__)
+    if(res is _obj__):
+      content = object.__getattribute__(self, "m_content")
+      # possibly, content will be updated: need to store it locally
+      res = self[name] = content
+    return res
+
+  def _reset__(self):
+    real = object.__getattribute__(self, "m_real")
+    if(real is not _obj__):
+      object.__setattr__(self, "m_real", _obj__)
+      for parent in object.__getattribute__(self, "m_parents"):
+        object.__getattribute__(parent, "_reset__")()
 
 
 
-
+def wrapper_sharing_ensure(obj, parent=None):
+  # print(f"wrapper_sharing_ensure({obj}, {parent})")
+  if(type(obj) is wrapper_sharing_cls):
+    if(parent is not None):
+      object.__getattribute__(self, "m_parent").append(parent)
+    return obj
+  else:
+    return wrapper_sharing_cls(obj, parent)
 
 
 ################################################################################
@@ -472,10 +599,12 @@ class _wrapper__c(object):
     "m_obj",    # the wrapped object
   )
   def __new__(cls, *args): # Necessary, when a wrapper is used as a superclass
-    # print(f"_wrapper__c.__new__({cls}, {args})")
+    print(f"_wrapper__c.__new__({cls}, {args})")
     if((len(args) == 4) and (isinstance(args[0], _registry__c))):
       return super(_wrapper__c, cls).__new__(cls)
     else:
+      # for i, arg in enumerate(args):
+      #   print(i, ":", type(arg), "=>", arg)
       name = args[0]
       bases = tuple((el.m_obj if(isinstance(el, _wrapper__c)) else el) for el in args[1])
       content = args[2]

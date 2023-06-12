@@ -248,9 +248,9 @@ class RegistryCategory(object):
   """Implements a delta ordering by associating to each delta a category (the categories are totally ordered by the user)"""
   __slots__ = ("m_content", "m_categories", "m_get", "m_delta_names")
 
-  def __init__(self, categories, get_categories):
-    self.m_categories = tuple(*categories)
-    self.m_get = get_categories
+  def __init__(self, categories, get_category):
+    self.m_categories = tuple(categories)
+    self.m_get = get_category
     self.m_content = {c: [] for c in self.m_categories}
     self.m_delta_names = set()
 
@@ -266,7 +266,7 @@ Parameters:
     if(name in self.m_delta_names):
       raise Exception(f"ERROR: delta \"{name}\" already declared")
     # 2. get the category of the delta
-    cat = self.m_get(name, *args, **kwargs)
+    cat = self.m_get(delta_info, *args, **kwargs)
     l = self.m_content.get(cat)
     if(l is None):
       raise Exception(f"ERROR: category \"{cat}\" not declared")

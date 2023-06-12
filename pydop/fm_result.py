@@ -181,18 +181,22 @@ class reason_tree__c(object):
     self.m_count = 0
 
   def add_reason_value_mismatch(self, ref, val, expected=None):
+    # print(f"add_reason_value_mismatch({ref.name}, {val}, {expected})")
     self.m_local.append(_reason_value_mismatch__c(ref, val, expected))
     self.m_count += 1
     return self
   def add_reason_value_none(self, ref):
+    # print(f"add_reason_value_none({ref})")
     self.m_local.append(_reason_value_none__c(ref))
     self.m_count += 1
     return self
   def add_reason_dependencies(self, ref, deps):
+    # print(f"add_reason_dependencies({ref}, {deps})")
     self.m_local.append(_reason_dependencies__c(ref, deps))
     self.m_count += 1  
     return self
   def add_reason_sub(self, sub):
+    # print(f"add_reason_sub({sub})")
     if((isinstance(sub, eval_result__c)) and (sub.m_reason is not None) and (bool(sub.m_reason))):
       self.m_subs.append(sub.m_reason)
       self.m_count += 1

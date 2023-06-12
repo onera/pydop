@@ -20,262 +20,68 @@
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
+"""
+This file implements the Multi-Lingual Hello World Product Line described in
+ [1] Dave Clarke, Radu Muschevici, José Proença, Ina Schaefer, and Rudolf Schlatte.
+     2010. Variability Modelling in the ABS Language.
+     In FMCO (LNCS, Vol. 6957). Springer, 204–224.
+     10.1007/978-3-642-25271-6_11
+"""
 
-from pydop.spl import SPL, RegistryGraph
 from pydop.fm_constraint import *
 from pydop.fm_diagram import *
-from pydop.operations.modules import VariantModules, VariantModule, register_modules, unregister_modules
-
-import enum
+from pydop.spl import SPL, RegistryGraph
+from pydop.operations.modules import *
 import sys
 
-class Hello(enum.Enum):
-  english="Hello"
-  german="Guten Tag"
-  spanish="hola"
-  french="Bonjour"
+fm = FD("HelloWorld",
+ FDMandatory(
+  FD("Language",
+   FDAlternative(
+    FD("English"), FD("Dutch"),
+    FD("German")
+ ))),
+ FDOptional(
+  FD("Repeat", times=Int(0,1000))
+))
 
 
-def get_fm():
-  return FD("HelloWorld",
-    FDAnd(
-      FD("lang", lang_v=Enum(Hello)),
-    ),
-    FDAny(
-      FD("times", times_v=Int(1,None))
-    )
-  )
+def gen_base_artifact():
+ res = Module("HW")
+ @add(res)
+ class Greater(object):
+   def sayHello(self): return "Hello World"
+ return res
+spl = SPL(fm, RegistryGraph(), gen_base_artifact)
 
 
-def test_module_single():
-  print("==========================================")
-  print("= test_module_single")
+def Nl(module):
+ @modify(module.Greater)
+ def sayHello(self): return "Hallo wereld"
 
-  hello_world_fm = get_fm()
+def Rpt(module, product):
+ @modify(module.Greater)
+ def sayHello(self):
+  tmp_str = self.original()
+  return " ".join(tmp_str for _ in range(product["times"]))
 
-  spl = SPL(hello_world_fm, RegistryGraph(), VariantModule("hw"))
-
-  @spl.delta(True)
-  def setup_hw(variant):
-    @variant.add
-    class HW(object): pass
-
-  def gen_print_core(hw_str):
-    def print_core(self, name):
-      print(f"{hw_str} {name}")
-    return print_core
-
-  def gen_print(nb):
-    def print(self, name):
-      for i in range(nb):
-        self.print_core(name)
-    return print
+def De(module):
+ @modify(module.Greater)
+ def sayHello(self): return "Hallo Welt"
 
 
-  @spl.delta("lang")
-  def setup_core(variant, product):
-    hw_str = product["lang_v"].value
-    variant.HW.add(gen_print_core(hw_str))
+spl.delta("Dutch")(Nl)
+spl.delta("German")(De)
+spl.delta("Repeat", after=["Nl", "De"])(Rpt)
 
-  @spl.delta("times")
-  def setup_print_1(variant, product):
-    nb = product["times_v"]
-    variant.HW.add(gen_print(nb))
+conf, err = spl.close_configuration({"English": True, "Repeat": True}, {"Dutch": True})
+if(err):
+  print(err); sys.exit(-1)
 
-  @spl.delta(Not("times"))
-  def setup_print_2(variant):
-    @variant.HW.add
-    def print(self, name):
-      self.print_core(name)
-
-
-  # English
-  conf_1 = { "HelloWorld": True, "lang": True, "lang_v": Hello.english, "times": True, "times_v": 2 };
-  variant = spl(conf_1)
-  register_modules(variant)
-  from hw import HW
-  HW().print("John")
-
-  #cleanup
-  unregister_modules(variant)
-
-  # German
-  diff_1 = { "lang_v": Hello.german, "times_v": 3 }
-  conf_2, errors = hello_world_fm.close_configuration(conf_1, diff_1)
-  assert(not bool(errors))
-  assert(conf_2 == hello_world_fm.close_configuration({ "HelloWorld": True, "lang": True, "lang_v": Hello.german, "times": True, "times_v": 3 })[0])
-  variant = spl(conf_2)
-  register_modules(variant)
-  from hw import HW
-  HW().print("Mia")
-  unregister_modules(variant)
-
-  # no repeat
-  conf_3, errors = hello_world_fm.close_configuration(conf_2, { "lang_v": Hello.spanish, "times": False })
-  assert(not bool(errors))
-  assert(conf_3 == hello_world_fm.close_configuration({ "HelloWorld": True, "lang": True, "lang_v": Hello.spanish, "times": False })[0])
-  variant = spl(conf_3)
-  register_modules(variant)
-  from hw import HW
-  HW().print("Luciana")
-
-  unregister_modules(variant)
-
-
-
-  ##########################################
-  #check failure
-
-  # 1. missing decl
-  conf_err1 = {}
-  try:
-    variant = spl(conf_err1)
-    print("ERROR in missing feature")
-  except Exception: pass
-
-  # 2. wrong group
-  conf_err2 = { "HelloWorld": True, "lang": False, "times": True, "times_v": 4 };
-  try:
-    variant = spl(conf_err2)
-    print("ERROR in wrong group")
-  except Exception: pass
-
-  # 3. bad attribute 1/2
-  conf_err3 = { "HelloWorld": True, "lang": True, "lang_v": 1, "times": True, "times_v": 4 };
-  try:
-    variant = spl(conf_err3)
-    print("ERROR in bad attribute 1/2")
-  except Exception: pass
-
-  # 4. bad attribute 2/2
-  conf_err4 = { "HelloWorld": True, "lang": True, "lang_v": Hello.french, "times": True, "times_v": 0 };
-  try:
-    variant = spl(conf_err4)
-    print("ERROR in bad attribute 2/2")
-  except Exception: pass
-
-
-
-
-
-def test_module_multiple():
-  print("==========================================")
-  print("= test_module_multiple")
-
-  hello_world_fm = get_fm()
-
-  spl = SPL(hello_world_fm, RegistryGraph(), VariantModules("hw"))
-
-  @spl.delta(True)
-  def setup_hw(variant):
-    @variant.hw.add
-    class HW(object): pass
-
-  def gen_print_core(hw_str):
-    def print_core(self, name):
-      print(f"{hw_str} {name}")
-    return print_core
-
-  def gen_print(nb):
-    def print(self, name):
-      for i in range(nb):
-        self.print_core(name)
-    return print
-
-
-  @spl.delta("lang")
-  def setup_core(variant, product):
-    hw_str = product["lang_v"].value
-    variant.hw.HW.add(gen_print_core(hw_str))
-
-  @spl.delta("times")
-  def setup_print_1(variant, product):
-    nb = product["times_v"]
-    variant.hw.HW.add(gen_print(nb))
-
-  @spl.delta(Not("times"))
-  def setup_print_2(variant):
-    @variant.hw.HW.add
-    def print(self, name):
-      self.print_core(name)
-
-
-  # English
-  conf_1 = { "HelloWorld": True, "lang": True, "lang_v": Hello.english, "times": True, "times_v": 2 };
-  variant = spl(conf_1)
-  register_modules(variant)
-  from hw import HW
-  HW().print("John")
-
-  #cleanup
-  unregister_modules(variant)
-
-  # German
-  diff_1 = { "lang_v": Hello.german, "times_v": 3 }
-  conf_2, errors = hello_world_fm.close_configuration(conf_1, diff_1)
-  assert(not bool(errors))
-  assert(conf_2 == hello_world_fm.close_configuration({ "HelloWorld": True, "lang": True, "lang_v": Hello.german, "times": True, "times_v": 3 })[0])
-  variant = spl(conf_2)
-  register_modules(variant)
-  from hw import HW
-  HW().print("Mia")
-  unregister_modules(variant)
-
-  # no repeat
-  conf_3, errors = hello_world_fm.close_configuration(conf_2, { "lang_v": Hello.spanish, "times": False })
-  assert(not bool(errors))
-  assert(conf_3 == hello_world_fm.close_configuration({ "HelloWorld": True, "lang": True, "lang_v": Hello.spanish, "times": False })[0])
-  variant = spl(conf_3)
-  register_modules(variant)
-  from hw import HW
-  HW().print("Luciana")
-
-  unregister_modules(variant)
-
-
-
-  ##########################################
-  #check failure
-
-  # 1. missing decl
-  conf_err1 = {}
-  try:
-    variant = spl(conf_err1)
-    print("ERROR in missing feature")
-  except Exception: pass
-
-  # 2. wrong group
-  conf_err2 = { "HelloWorld": True, "lang": False, "times": True, "times_v": 4 };
-  try:
-    variant = spl(conf_err2)
-    print("ERROR in wrong group")
-  except Exception: pass
-
-  # 3. bad attribute 1/2
-  conf_err3 = { "HelloWorld": True, "lang": True, "lang_v": 1, "times": True, "times_v": 4 };
-  try:
-    variant = spl(conf_err3)
-    print("ERROR in bad attribute 1/2")
-  except Exception: pass
-
-  # 4. bad attribute 2/2
-  conf_err4 = { "HelloWorld": True, "lang": True, "lang_v": Hello.french, "times": True, "times_v": 0 };
-  try:
-    variant = spl(conf_err4)
-    print("ERROR in bad attribute 2/2")
-  except Exception: pass
-
-
-  # conf1 = {"lang": True, "lang_v": 1, "times": True, "times_v": 4}
-  # conf2 = make_configuration(conf1)
-  # assert(conf2 == conf1)
-  # conf3 = hello_world_fm.make_product(conf2)
-  # assert(conf3 == conf_err3)
-
-
-
-if(__name__ == "__main__"):
-  test_module_single()
-  test_module_multiple()
-
+try:
+  hw_duch_4 = spl(conf)
+except Exception as e:
+  print(e); sys.exit(-1)
+ 
+print(hw_duch_4.Greater().sayHello())
 

@@ -53,3 +53,18 @@ def _path_to_str__(path):
     return "None"
   raise ValueError(f"ERROR: unexpected path type (expected str, tuple or list, found {type(path)})")
 
+
+##########################################
+# for debug
+indent_counter = 0
+
+def wrap_start_end(f):
+  def res(*args, **kwargs):
+    global indent_counter
+    print((" " * indent_counter) + f"starting {f.__name__}({args[0].name}, {args[1:]}, {kwargs})")
+    indent_counter += 1
+    res = f(*args, **kwargs)
+    indent_counter -= 1
+    print((" " * indent_counter) + f"ending {f.__name__}")
+    return res
+  return res

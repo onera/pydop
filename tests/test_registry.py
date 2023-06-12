@@ -48,11 +48,8 @@ def test_RegistryGraph_1():
 def test_RegistryGraph_2():
   reg = RegistryGraph()
   d = { f"d{i}": info_cls( f"d{i}") for i in range(5) }
-  reg.add(d["d0"])
-  reg.add(d["d1"])
-  reg.add(d["d2"])
-  reg.add(d["d3"])
-  reg.add(d["d4"])
+  for i in range(5):
+    reg.add(d[f"d{i}"])
 
   reg.add_order(("d0", "d1"), "d2", ("d3", "d4"))
 
@@ -64,11 +61,28 @@ def test_RegistryGraph_2():
   assert (succs["d4"] == frozenset())
 
 
+def test_RegistryCategory():
+  categories = (1,2,3,)
+  def get_category(delta_info, *args, **kwargs):
+    name = delta_info.name
+    if(name[-1] < "2"): return 3
+    elif(name[-1] == "2"): return 2
+    else: return 1
+
+  reg = RegistryCategory(categories, get_category)
+  d = { f"d{i}": info_cls( f"d{i}") for i in range(5) }
+  for i in range(5):
+    reg.add(d[f"d{i}"])
+
+  deltas = tuple(reg)
+  assert(deltas == (d["d3"], d["d4"], d["d2"], d["d0"], d["d1"],))
+
+
 
 if(__name__ == '__main__'):
   test_RegistryGraph_1()
   test_RegistryGraph_2()
-
+  test_RegistryCategory()
 
 
 

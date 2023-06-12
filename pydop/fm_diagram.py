@@ -40,7 +40,6 @@ def _manage_parameter__(param):
 
 
 
-
 ################################################################################
 # path lookup class
 ################################################################################
@@ -406,14 +405,13 @@ class _fd__c(object):
     return res
 
   def _eval_generic__(self, conf, f_get, expected=True):
-    # print(f"_eval_generic__([{self.__class__.__name__}]{self.m_name}, {conf}, {f_get}, {expected})")
     expected_att = (_empty__ if(expected is False) else expected)
 
     results_content = tuple(f_get(el, conf, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
     result_att = tuple(self._manage_attribute__(el, conf, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_attributes))
     result_ctc = tuple(el(conf, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_ctcs))
 
-    nvalue_subs  = tuple(itertools.chain((el.m_nvalue for el in results_content), (el.m_value for resu in (result_att, result_ctc) for el in resu)))
+    nvalue_subs  = tuple(itertools.chain((el.m_nvalue for el in results_content), (el.m_value for el in itertools.chain(result_att, result_ctc))))
     nvalue_local = None
     nvalue_sub = self._compute__(nvalue_subs, nvalue_local)
     value_subs = all(el.m_value for el in results_content)
@@ -469,12 +467,13 @@ class _fd__c(object):
     name, spec = att
     value = conf.get(att, _empty__)
     if(value is _empty__):
-      if(expected):
+      # if(expected):
         reason = reason_tree__c(self, 0)
         reason.add_reason_value_none(att)
         return eval_result__c(False, reason)
-      else:
-        return eval_result__c(False, None)
+      # else:
+      #   print("eval_result__c(False, None)")
+      #   return eval_result__c(False, None)
     else:
       res = spec(value)
       if(expected == res):

@@ -30,7 +30,7 @@ This file implements the FormbaR Statechart Multi-Product Line described in
 
 
 from pydop.spl import SPL, RegistryGraph
-from pydop.mspl import MSPL
+from pydop.mpl import MPL
 from pydop.fm_diagram import *
 from pydop.operations.modules import VariantModule
 
@@ -50,7 +50,7 @@ def test_station():
   print("==========================================")
   print("= test_station")
 
-  mspl = MSPL(spl_factory=spl_factory)
+  mpl = MPL(spl_factory=spl_factory)
 
   ##########################################
   # signal SPL
@@ -59,7 +59,7 @@ def test_station():
     FDXor(FD("Light"), FD("Form")),
     FDAny(FD("Dir"))
   )
-  signals = mspl.new("signals", signals_fm)
+  signals = mpl.new("signals", signals_fm)
 
   LSig = { "Signals": True, "Light": True, "Form": False , "Dir": False }
 
@@ -101,7 +101,7 @@ def test_station():
   switches_fm = FD("Switch",
     FDXor(FD("Electric"), FD("Mechanic")),
   )
-  switches = mspl.new("switches", switches_fm)
+  switches = mpl.new("switches", switches_fm)
 
   @switches.delta(True)
   def switches_init(variant):
@@ -133,7 +133,7 @@ def test_station():
   interlocking_fm = FD("Interlocking",
     FDAny(FD("Modern"), FD("DirOut"))
   )
-  interlocking = mspl.new("interlocking", interlocking_fm)
+  interlocking = mpl.new("interlocking", interlocking_fm)
 
   def PSwitch(product):
     # default correct product
@@ -165,30 +165,30 @@ def test_station():
         p1 = { "Switch": True, "Electric": True, "Mechanic": False }
         p2 = { "Switch": True, "Electric": False, "Mechanic": True }
 
-        swNormal = mspl["switches", p1].CSwitch()
-        track = mspl["switches", p2].CTrack()
+        swNormal = mpl["switches", p1].CSwitch()
+        track = mpl["switches", p2].CTrack()
         swNew = track.appendSwitch ()
 
 
         p3 = { "Signals": True, "Light": False, "Form": True , "Dir": False }
 
-        sigNormal = mspl["signals", LSig].CSig()
-        sigShunt  = mspl["signals", p3].CSig()
+        sigNormal = mpl["signals", LSig].CSig()
+        sigShunt  = mpl["signals", p3].CSig()
 
         return sigNormal.eqAspect(sigShunt)
 
       def createSwitch(self):
         switches_prod = PSwitch(product)
-        return mspl["switches", switches_prod].CSwitch()
+        return mpl["switches", switches_prod].CSwitch()
 
       def createOutSignal(self):
         signals_prod = PSignal(product)
-        return mspl["signals", signals_prod].CSig()
+        return mpl["signals", signals_prod].CSig()
 
       def createInSignal(self):
         signals_prod = PSignal(product)
         signals_prod = signals_fm.combine_product(signals_prod, {"Dir": False})
-        return mspl["signals", signals_prod].CSig()
+        return mpl["signals", signals_prod].CSig()
 
 
   ##########################################
@@ -199,23 +199,23 @@ def test_station():
   p1, err1 = interlocking_fm.close_configuration(interlocking_prod, {"DirOut": True})
   p2, err2 = interlocking_fm.close_configuration(interlocking_prod, {"Modern": True})
 
-  # testing mspl getters with spl_id
-  ils1 = mspl["interlocking", p1].CILS()
-  ils2 = mspl["interlocking", p2].CILS()
+  # testing mpl getters with spl_id
+  ils1 = mpl["interlocking", p1].CILS()
+  ils2 = mpl["interlocking", p2].CILS()
 
   print(f"type(ils1) = {type(ils1)}")
   print(f"type(ils2) = {type(ils2)}")
   print(f"type(ils1) == type(ils2): {type(ils1) == type(ils2)}")
 
-  # testing mspl getters with spl object
-  ils3 = mspl[interlocking, p1].CILS()
-  ils4 = mspl[interlocking, p2].CILS()
+  # testing mpl getters with spl object
+  ils3 = mpl[interlocking, p1].CILS()
+  ils4 = mpl[interlocking, p2].CILS()
 
   print(f"type(ils1) == type(ils3): {type(ils1) == type(ils3)}")
   print(f"type(ils2) == type(ils4): {type(ils2) == type(ils4)}")
 
-  ils5 = mspl["interlocking", p1].CILS()
-  ils6 = mspl["interlocking", p2].CILS()
+  ils5 = mpl["interlocking", p1].CILS()
+  ils6 = mpl["interlocking", p2].CILS()
 
   print(f"type(ils1) == type(ils5): {type(ils1) == type(ils5)}")
   print(f"type(ils2) == type(ils6): {type(ils2) == type(ils6)}")

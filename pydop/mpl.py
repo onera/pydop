@@ -25,7 +25,7 @@ from pydop.spl import SPL
 from pydop.utils import _empty__
 
 ###############################################################################
-# MSPL DEFINITION
+# MPL DEFINITION
 ###############################################################################
 
 def default_factory(spl_id, *args, **kwargs):
@@ -33,7 +33,7 @@ def default_factory(spl_id, *args, **kwargs):
 
 
 
-class MSPL(object):
+class MPL(object):
   __slots__ = ("m_spl_factory", "m_reg",)
   def __init__(self, spl_factory=default_factory):
     self.m_spl_factory = spl_factory
