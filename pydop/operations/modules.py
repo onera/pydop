@@ -253,7 +253,7 @@ class _original_replacer_cls(ast.NodeTransformer):
     return self.m_qualast
 
   def create_exec_env(self, nonlocals):
-    exec_env = globals() | nonlocals
+    exec_env = {**globals(), **nonlocals}
     exec_env_keys = frozenset(exec_env.keys())
     self.m_obj_name = " "
     while(self.m_obj_name in exec_env_keys):

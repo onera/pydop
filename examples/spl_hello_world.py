@@ -32,56 +32,70 @@ from pydop.fm_constraint import *
 from pydop.fm_diagram import *
 from pydop.spl import SPL, RegistryGraph
 from pydop.operations.modules import *
+
 import sys
 
-fm = FD("HelloWorld",
- FDMandatory(
-  FD("Language",
-   FDAlternative(
-    FD("English"), FD("Dutch"),
-    FD("German")
- ))),
- FDOptional(
-  FD("Repeat", times=Int(0,1000))
-))
+
+def spl_definition():
+  fm = FD("HelloWorld",
+   FDMandatory(
+    FD("Language",
+     FDAlternative(
+      FD("English"), FD("Dutch"),
+      FD("German")
+   ))),
+   FDOptional(
+    FD("Repeat", times=Int(0,1000))
+  ))
 
 
-def gen_base_artifact():
- res = Module("HW")
- @add(res)
- class Greater(object):
-   def sayHello(self): return "Hello World"
- return res
-spl = SPL(fm, RegistryGraph(), gen_base_artifact)
+  def base_artifact_factory():
+   res = Module("HW")
+   @add(res)
+   class Greater(object):
+     def sayHello(self): return "Hello World"
+   return res
+
+  spl = SPL(fm, RegistryGraph(), base_artifact_factory)
 
 
-def Nl(module):
- @modify(module.Greater)
- def sayHello(self): return "Hallo wereld"
+  def Nl(module):
+   @modify(module.Greater)
+   def sayHello(self): return "Hallo wereld"
 
-def Rpt(module, product):
- @modify(module.Greater)
- def sayHello(self):
-  tmp_str = self.original()
-  return " ".join(tmp_str for _ in range(product["times"]))
+  def Rpt(module, product):
+   @modify(module.Greater)
+   def sayHello(self):
+    tmp_str = self.original()
+    return " ".join(tmp_str for _ in range(product["times"]))
 
-def De(module):
- @modify(module.Greater)
- def sayHello(self): return "Hallo Welt"
+  def De(module):
+   @modify(module.Greater)
+   def sayHello(self): return "Hallo Welt"
 
 
-spl.delta("Dutch")(Nl)
-spl.delta("German")(De)
-spl.delta("Repeat", after=["Nl", "De"])(Rpt)
+  spl.delta("Dutch")(Nl)
+  spl.delta("German")(De)
+  spl.delta("Repeat", after=["Nl", "De"])(Rpt)
 
-conf, err = spl.close_configuration({"English": True, "Repeat": True}, {"Dutch": True})
-if(err):
-  print(err); sys.exit(-1)
+  return spl
 
-try:
-  hw_duch_4 = spl(conf)
-except Exception as e:
-  print(e); sys.exit(-1)
- 
-print(hw_duch_4.Greater().sayHello())
+
+
+if(__name__ == '__main__'):
+  spl = spl_definition()
+
+  conf = {}
+  for arg in sys.argv[1:]:
+    if("=" in arg):
+      arg, val = arg.split("=")
+      conf[arg] = int(val)
+    else: conf[arg] = True
+
+  conf, err = spl.close_configuration(conf)
+  if(err):
+    print(err); sys.exit(-1)
+
+  HW = spl(conf)
+  print(HW.Greater().sayHello())
 

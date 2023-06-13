@@ -31,26 +31,20 @@ This file implements the FormbaR Statechart Multi-Product Line described in
 
 from pydop.spl import SPL, RegistryGraph
 from pydop.mpl import MPL
+from pydop.fm_constraint import *
 from pydop.fm_diagram import *
-from pydop.operations.modules import VariantModule
+from pydop.operations.modules import Module, add, remove, modify
 
-import importlib
-
-
-##########################################
-# utils
+import sys
 
 
-def spl_factory(spl_id, fm):
-  return SPL(fm, RegistryGraph(), VariantModule(spl_id))
+def mpl_definition():
 
-
-
-def test_station():
-  print("==========================================")
-  print("= test_station")
+  def spl_factory(spl_id, fm):
+    return SPL(fm, RegistryGraph(), lambda:Module(spl_id))
 
   mpl = MPL(spl_factory=spl_factory)
+
 
   ##########################################
   # signal SPL
@@ -65,17 +59,18 @@ def test_station():
 
   @signals.delta(True)
   def signal_init(variant):
-    @variant.add
+    @add(variant)
     class CSig(object):
       __slots__ = ()
+      def eqAspect(self, other): return False # implementation not provided in the paper
 
   @signals.delta("Light", after=["signal_init"])
   def LDelta(variant):
-    @variant.add
+    @add(variant)
     class CBulb(object):
       __slots__ = ()
 
-    @variant.CSig.add
+    @add(variant.CSig)
     def addBulb(self):
       variant.signals.CBulb()
 
@@ -85,14 +80,13 @@ def test_station():
 
   @signals.delta("Dir", after=["signal_init"])
   def DDelta(variant):
-    @variant.add
+    @add(variant)
     class CDir(object):
       __slots__ = ()
 
-    @variant.CSig.add
+    @add(variant.CSig)
     def getDirection(self):
       return variant.CDir()
-
 
 
   ##########################################
@@ -105,11 +99,11 @@ def test_station():
 
   @switches.delta(True)
   def switches_init(variant):
-    @variant.add
+    @add(variant)
     class CSwitch(object):
       __slots__ = ()
 
-    @variant.add
+    @add(variant)
     class CTrack(object):
       __slots__ = ()
       def appendSwitch(self):
@@ -122,7 +116,7 @@ def test_station():
 
   @switches.delta("Mechanic", after=["switches_init"])
   def MDelta(variant):
-    @variant.CSwitch.add
+    @add(variant.CSwitch)
     def isMechanic(self):
       return True
 
@@ -139,7 +133,7 @@ def test_station():
     # default correct product
     res = { "Switch": True, "Electric": True, "Mechanic": False }
     if(not product["Modern"]):
-      res, errors = switches_fm.close_configuration(res, {"Mechanic": True})
+      res, errors = switches.close_configuration(res, {"Mechanic": True})
       # no error can actually occur
     return res
 
@@ -149,17 +143,17 @@ def test_station():
     if(And("DirOut", "Modern")(product)):
       pass
     elif(product["Modern"]):
-      res, errors =  signals_fm.close_configuration(res, {"Dir": False})
+      res, errors =  signals.close_configuration(res, {"Dir": False})
     elif(And("DirOut", Not("Modern"))(product)):
-      res, errors =  signals_fm.close_configuration(res, {"Form": True})
+      res, errors =  signals.close_configuration(res, {"Form": True})
     else:
-      res, errors = signals_fm.close_configuration(res, {"Form": True, "Dir": False})
+      res, errors = signals.close_configuration(res, {"Form": True, "Dir": False})
     return res
 
 
   @interlocking.delta(True)
   def interlocking_init(variant, product):
-    @variant.add
+    @add(variant)
     class CILS(object):
       def testSig(self):
         p1 = { "Switch": True, "Electric": True, "Mechanic": False }
@@ -187,40 +181,28 @@ def test_station():
 
       def createInSignal(self):
         signals_prod = PSignal(product)
-        signals_prod = signals_fm.combine_product(signals_prod, {"Dir": False})
+        signals_prod, errors = signals.close_configuration(signals_prod, {"Dir": False})
         return mpl["signals", signals_prod].CSig()
 
 
-  ##########################################
-  # railway station
-
-  interlocking_prod = { "Interlocking": True, "Modern": False, "DirOut": False }
-
-  p1, err1 = interlocking_fm.close_configuration(interlocking_prod, {"DirOut": True})
-  p2, err2 = interlocking_fm.close_configuration(interlocking_prod, {"Modern": True})
-
-  # testing mpl getters with spl_id
-  ils1 = mpl["interlocking", p1].CILS()
-  ils2 = mpl["interlocking", p2].CILS()
-
-  print(f"type(ils1) = {type(ils1)}")
-  print(f"type(ils2) = {type(ils2)}")
-  print(f"type(ils1) == type(ils2): {type(ils1) == type(ils2)}")
-
-  # testing mpl getters with spl object
-  ils3 = mpl[interlocking, p1].CILS()
-  ils4 = mpl[interlocking, p2].CILS()
-
-  print(f"type(ils1) == type(ils3): {type(ils1) == type(ils3)}")
-  print(f"type(ils2) == type(ils4): {type(ils2) == type(ils4)}")
-
-  ils5 = mpl["interlocking", p1].CILS()
-  ils6 = mpl["interlocking", p2].CILS()
-
-  print(f"type(ils1) == type(ils5): {type(ils1) == type(ils5)}")
-  print(f"type(ils2) == type(ils6): {type(ils2) == type(ils6)}")
+  return mpl
 
 
 
-if(__name__ == "__main__"):
-  test_station()
+if(__name__ == '__main__'):
+  mpl = mpl_definition()
+
+  conf = {}
+  conf = {}
+  for arg in sys.argv[1:]:
+    conf[arg] = True
+
+  interlocking = mpl["interlocking", conf]
+  CILS = interlocking.CILS()
+  print(CILS.createSwitch())
+  print(CILS.createOutSignal())
+  print(CILS.createInSignal())
+
+  print(CILS.testSig())
+
+

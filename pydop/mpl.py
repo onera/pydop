@@ -77,6 +77,12 @@ class MPL(object):
 
   def __getitem__(self, key):
     global _empty__
+    if(isinstance(key, (tuple, list)) and (len(key) == 2)):
+      spl_name, conf = key
+      conf, err = self[spl_name].close_configuration(conf)
+      if(err):
+        raise ValueError(err)
+      key = (spl_name, conf)
     res = self.m_reg.get(key, _empty__)
     if(res is _empty__):
       if(isinstance(key, (list, tuple)) and (len(key) == 2)):

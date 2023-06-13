@@ -45,7 +45,7 @@ usage: run this file with the selected features in parameter.
 from pydop.spl import SPL, RegistryGraph
 from pydop.fm_constraint import *
 from pydop.fm_diagram import *
-from pydop.operations.modules import Module, add, remove, modify, register_module
+from pydop.operations.modules import Module, add, remove, modify
 
 import sys
 import time
@@ -61,7 +61,7 @@ def spl_definition():
 
 
   # the base module is presented in [1], page 3 (Figure 1)
-  def base_module_factory():
+  def base_artifact_factory():
     # setup the module, starting empty
     res = Module("Clock")
 
@@ -191,7 +191,7 @@ def spl_definition():
   ))
 
   # SPL declaration
-  spl = SPL(fm, RegistryGraph(), base_module_factory)
+  spl = SPL(fm, RegistryGraph(), base_artifact_factory)
 
 
   # the deltas, as in [1], page 10 (Figure 4)
@@ -291,17 +291,15 @@ def spl_definition():
   return spl
 
 
+
 if(__name__ == '__main__'):
   spl = spl_definition()
 
-  conf = {"Clock": True, "DisplayMode": False, "Timer": False}
-  for arg in sys.argv:
-    if(arg in conf):
-      conf[arg] = True
+  conf = {}
+  for arg in sys.argv[1:]:
+    conf[arg] = True
 
-  variant = spl(conf)
-  register_module(variant)
-  import Clock
+  Clock = spl(conf)
 
   context = Clock.setup_context()
   interpreter = sismic.interpreter.Interpreter(Clock.statechart, initial_context=context)

@@ -32,220 +32,110 @@ This file implements the Expression Product Line described in
 from pydop.spl import SPL, RegistryGraph
 from pydop.fm_constraint import *
 from pydop.fm_diagram import *
-from pydop.operations.modules import VariantModule, VariantModules, register_modules, unregister_modules
+from pydop.operations.modules import Module, add, remove, modify
+from pydop.operations.modules import register_modules
 
 import sys
 
 
-def get_fm():
-  return FD("epl",
-    FDAnd(FD("Lit", default_lit_value=Int())),
-    FDAny(FD("Print"), FD("Eval")),
-    FDAny(FD("Add"))
+
+def spl_definition():
+
+  epl_fm = FD("epl",
+    FDMandatory(
+      FD("Lit", default_lit_value=Int())),
+    FDOptional(FD("Print"), FD("Eval"), FD("Add")),
   )
 
-def test_epl_single():
-  print("==========================================")
-  print("= test_epl_single")
+  def base_artifact_factory():
+    res = Module("EPL")
+    @add(res)
+    class Exp(object): 
+      name = "Exp"
+    return res
 
-  epl_fm = get_fm()
-  epl = SPL(epl_fm, RegistryGraph(), VariantModule("EPL"))
+  epl = SPL(epl_fm, RegistryGraph(), base_artifact_factory)
 
   # base exp
 
-  @epl.delta(True)
-  def setup_exp(variant):
-    @variant.add
-    class Exp(object):
-      name = "Exp"
-
-    @variant.add
-    class A(object): pass
-
-
-  @epl.delta("Print", after=["setup_exp"])
+  @epl.delta("Print")
   def setup_exp_print(variant):
-    @variant.Exp.add
+    @add(variant.Exp)
     def toString(self): return variant.Exp.name
 
-  @epl.delta("Eval", after=["setup_exp"])
+  @epl.delta("Eval")
   def setup_exp_eval(variant):
-    @variant.Exp.add
+    @add(variant.Exp)
     def toInt(self): return None
 
   # literals
 
-  @epl.delta("Lit", after=["setup_exp"])
+  @epl.delta("Lit")
   def setup_lit(variant, product):
     default_lit_value = product["default_lit_value"]
-    @variant.add
-    class Lit(variant.Exp, variant.A):
-      # __slots__ = ("val",) <= incomatible with class copying
+    @add(variant)
+    class Lit(variant.Exp):
       def __init__(self, x=default_lit_value):
         self.val = x
 
   @epl.delta(And("Lit", "Print"), after=["setup_lit"])
   def setup_lit_print(variant):
-    @variant.Lit.add
+    @add(variant.Lit)
     def toString(self): return f"{self.val}"
 
   @epl.delta(And("Lit", "Eval"), after=["setup_lit"])
   def setup_lit_eval(variant):
-    @variant.Lit.add
+    @add(variant.Lit)
     def toInt(self): return self.val
-
-  @epl.delta(And("Lit", "Print", "Eval"), after=["setup_lit_print", "setup_lit_eval"])
-  def setup_lit_eval_print(variant):
-    @variant.Lit.modify
-    def toInt(self):
-      res = original()
-      # print(self.toString())
-      return res
 
   # Add
 
-  @epl.delta("Add", after=["setup_exp"])
+  @epl.delta("Add")
   def setup_add(variant):
-    @variant.add
+    @add(variant)
     class Add(variant.Exp):
-      # __slots__ = ("a", "b",) <= incomatible with class copying
       def __init__(self, a, b):
         self.a = a
         self.b = b
 
   @epl.delta(And("Add", "Print"), after=["setup_add"])
   def setup_add_print(variant):
-    @variant.Add.add
+    @add(variant.Add)
     def toString(self): return f"({self.a.toString()} + {self.b.toString()})"
 
   @epl.delta(And("Add", "Eval"), after=["setup_add"])
   def setup_add_eval(variant):
-    @variant.Add.add
+    @add(variant.Add)
     def toInt(self): return self.a.toInt() + self.b.toInt()
 
 
-
-  # Computation of variant
-
-  conf_1 = {"epl": True, "Lit": True, "default_lit_value": 3, "Print": True, "Eval": True, "Add": True}
-  variant = epl(conf_1)
-
-  # insertion in the module list
-  register_modules(variant)
-
-  # getting the module EPL
-  # EPL = sys.modules['EPL']
-  import EPL
-
-  l1 = EPL.Lit(1)
-  l2 = EPL.Lit(2)
-  l3 = EPL.Add(l1, l2)
-  print(l3.toString())
-  print(l1.toInt())
-  print(EPL.Lit().toString())
+  return epl
 
 
 
-def test_epl_multiple():
-  print("==========================================")
-  print("= test_epl_multiple")
+if(__name__ == '__main__'):
+  spl = spl_definition()
 
-  epl_fm = get_fm()
-  epl = SPL(epl_fm, RegistryGraph(), VariantModules("EPL"))
+  conf = {}
+  for arg in sys.argv[1:]:
+    if("=" in arg):
+      arg, val = arg.split("=")
+      conf[arg] = int(val)
+    else: conf[arg] = True
 
-  # base exp
+  conf, err = spl.close_configuration(conf)
+  if(err):
+    print(err); sys.exit(-1)
 
-  @epl.delta(True)
-  def setup_exp(variant):
-    @variant.add
-    class Exp(object):
-      name = "Exp"
+  EPL = spl(conf)
+  register_modules(EPL)
+  from EPL import *
 
-    @variant.add
-    class A(object): pass
-
-
-  @epl.delta("Print", after=["setup_exp"])
-  def setup_exp_print(variant):
-    @variant.Exp.add
-    def toString(self): return variant.Exp.name
-
-  @epl.delta("Eval", after=["setup_exp"])
-  def setup_exp_eval(variant):
-    @variant.Exp.add
-    def toInt(self): return None
-
-  # literals
-
-  @epl.delta("Lit", after=["setup_exp"])
-  def setup_lit(variant, product):
-    default_lit_value = product["default_lit_value"]
-    @variant.add
-    class Lit(variant.Exp, variant.A):
-      # __slots__ = ("val",) <= incomatible with class copying
-      def __init__(self, x=default_lit_value):
-        self.val = x
-
-  @epl.delta(And("Lit", "Print"), after=["setup_lit"])
-  def setup_lit_print(variant):
-    @variant.Lit.add
-    def toString(self): return f"{self.val}"
-
-  @epl.delta(And("Lit", "Eval"), after=["setup_lit"])
-  def setup_lit_eval(variant):
-    @variant.Lit.add
-    def toInt(self): return self.val
-
-  @epl.delta(And("Lit", "Print", "Eval"), after=["setup_lit_print", "setup_lit_eval"])
-  def setup_lit_eval_print(variant):
-    @variant.Lit.modify
-    def toInt(self):
-      res = original()
-      # print(self.toString())
-      return res
-
-  # Add
-
-  @epl.delta("Add", after=["setup_exp"])
-  def setup_add(variant):
-    @variant.add
-    class Add(variant.Exp):
-      # __slots__ = ("a", "b",) <= incomatible with class copying
-      def __init__(self, a, b):
-        self.a = a
-        self.b = b
-
-  @epl.delta(And("Add", "Print"), after=["setup_add"])
-  def setup_add_print(variant):
-    @variant.Add.add
-    def toString(self): return f"({self.a.toString()} + {self.b.toString()})"
-
-  @epl.delta(And("Add", "Eval"), after=["setup_add"])
-  def setup_add_eval(variant):
-    @variant.Add.add
-    def toInt(self): return self.a.toInt() + self.b.toInt()
-
-
-
-  # Computation of variant
-
-  conf_1 = {"epl": True, "Lit": True, "default_lit_value": 3, "Print": True, "Eval": True, "Add": True}
-  variant = epl(conf_1)
-
-  # insertion in the module list
-  register_modules(variant)
-
-  # getting the module EPL
-  # EPL = sys.modules['EPL']
-  import EPL
-
-  l1 = EPL.Lit(1)
-  l2 = EPL.Lit(2)
-  l3 = EPL.Add(l1, l2)
-  print(l3.toString())
-  print(l1.toInt())
-  print(EPL.Lit().toString())
-
-if(__name__ == "__main__"):
-  test_epl()
+  while True:
+    line = input("Please enter an expression or quit:\n")
+    if('quit' in line): break
+    exp = eval(line)
+    print("expression =", exp)
+    if(conf["Print"]): print(" print =", exp.toString())
+    if(conf["Eval"]):  print(" eval  =", exp.toInt())
 
