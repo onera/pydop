@@ -71,9 +71,9 @@ def test_declaration():
   res = errors.add_duplicate(in_path, ref_1, ref_2)
   assert(bool(errors))
   assert(len(tuple(iter(errors))) == 1)
-  print(str(errors))
+  # print(str(errors))
   tmp = ', '.join(f"\"{str(type(el))}\"" for el in (ref_1, ref_2))
-  print(f"ERROR: path \"{in_path}\" correspond to more than one object (found types {tmp})")
+  # print(f"ERROR: path \"{in_path}\" correspond to more than one object (found types {tmp})")
   assert(str(errors) == f"ERROR: path \"{in_path}\" correspond to more than one object (found types {tmp})")
   assert(res is errors)
 

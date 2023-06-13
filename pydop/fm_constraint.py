@@ -20,6 +20,10 @@
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
+"""
+This file contains the different classes for building boolean expressions over variables.
+In particular, the class `_expbool__c` is an abstract super classes of all boolean classes and contains most functionalities of the boolean classes
+"""
 
 import itertools
 
@@ -35,10 +39,10 @@ from pydop.utils import _empty__
 # 1. main class (for all non leaf behavior)
 
 class _expbool__c(object):
-  __slots__ = ("m_content", "m_vars")
+  __slots__ = ("m_content", "m_vars",)
   def __init__(self, content):
     self.m_content = tuple(_expbool__c._manage_parameter__(param) for param in content)
-    self. m_vars = None
+    self.m_vars = None
 
   def get_name(self): return self.__class__.__name__
   def __str__(self): return f"{self.get_name()}({', '.join(str(el) for el in self.m_content)})"
@@ -62,13 +66,6 @@ class _expbool__c(object):
         reason.add_reason_sub(r)
     return eval_result__c(res, reason)
  
-  # @staticmethod
-  # def _eval_generic__(el, product, i, expected):
-  #   if(isinstance(el, _expbool__c)):
-  #     return el(product, i, expected)
-  #   else:
-  #     return product.get(el, el)
-
   @staticmethod
   def _manage_parameter__(param):
     if(isinstance(param, _expbool__c)):
@@ -126,9 +123,13 @@ class _expbool__c(object):
 # 2. leafs
 
 class Var(_expbool__c):
-  # override _expbool__c default tree behavior (Var is a leaf)
+  """Class for variables (e.g., features and attributes)"""
+  # overrides _expbool__c default tree behavior (Var is a leaf)
   __slots__ = ()
   def __init__(self, var):
+    """Var(object) -> Var
+The parameter is the id of the variable
+    """
     self.m_content = var
   def __call__(self, product, idx=None, expected=True):
     global _empty__
@@ -149,9 +150,13 @@ class Var(_expbool__c):
 
 
 class Lit(_expbool__c):
-  # override _expbool__c default tree behavior (Lit is a leaf)
+  """Class for literals (i.e., wraps python objects within a boolean expression)"""
+  # overrides _expbool__c default tree behavior (Lit is a leaf)
   __slots__ = ()
   def __init__(self, var):
+    """Lit(object) -> Lit
+The parameter is the wrapped object
+    """
     self.m_content = var
   def __call__(self, product, idx=None, expected=True):
     return eval_result__c(self.m_content, None)
@@ -166,6 +171,7 @@ class Lit(_expbool__c):
 # 3. constraint over non-booleans
 
 class Lt(_expbool__c):
+  """Class for the < comparison"""
   __slots__ = ()
   def __init__(self, left, right):
     _expbool__c.__init__(self, (left, right,))
@@ -174,6 +180,7 @@ class Lt(_expbool__c):
   def _get_expected__(self, el, idx, expected): return None
       
 class Leq(_expbool__c):
+  """Class for the <= comparison"""
   __slots__ = ()
   def __init__(self, left, right):
     _expbool__c.__init__(self, (left, right,))
@@ -182,6 +189,7 @@ class Leq(_expbool__c):
   def _get_expected__(self, el, idx, expected): return None
 
 class Eq(_expbool__c):
+  """Class for the == comparison"""
   __slots__ = ()
   def __init__(self, left, right):
     _expbool__c.__init__(self, (left, right,))
@@ -190,6 +198,7 @@ class Eq(_expbool__c):
   def _get_expected__(self, el, idx, expected): return None
 
 class Geq(_expbool__c):
+  """Class for the >= comparison"""
   __slots__ = ()
   def __init__(self, left, right):
     _expbool__c.__init__(self, (left, right,))
@@ -198,6 +207,7 @@ class Geq(_expbool__c):
   def _get_expected__(self, el, idx, expected): return None
 
 class Gt(_expbool__c):
+  """Class for the > comparison"""
   __slots__ = ()
   def __init__(self, left, right):
     _expbool__c.__init__(self, (left, right,))
@@ -210,6 +220,7 @@ class Gt(_expbool__c):
 # 4. boolean operators
 
 class And(_expbool__c):
+  """Class for the logical conjunction of booleans"""
   __slots__ = ()
   def __init__(self, *args):
     _expbool__c.__init__(self, args)
@@ -220,6 +231,7 @@ class And(_expbool__c):
     else: return None
 
 class Or(_expbool__c):
+  """Class for the logical disjunction of booleans"""
   __slots__ = ()
   def __init__(self, *args):
     _expbool__c.__init__(self, args)
@@ -230,6 +242,7 @@ class Or(_expbool__c):
     else: return False
 
 class Not(_expbool__c):
+  """Class for the logical negation of a boolean"""
   __slots__ = ()
   def __init__(self, arg):
     _expbool__c.__init__(self, (arg,))
@@ -241,6 +254,7 @@ class Not(_expbool__c):
     else: return None
 
 class Xor(_expbool__c):
+  """Class for the logical alternative of booleans"""
   __slots__ = ()
   def __init__(self, *args):
     _expbool__c.__init__(self, args)
@@ -255,6 +269,7 @@ class Xor(_expbool__c):
     return None
 
 class Conflict(_expbool__c):
+  """Class for the logical NAND gate over multiple booleans"""
   __slots__ = ()
   def __init__(self, *args):
     _expbool__c.__init__(self, args)
@@ -269,6 +284,7 @@ class Conflict(_expbool__c):
     return None
 
 class Implies(_expbool__c):
+  """Class for the logical implication of booleans"""
   __slots__ = ()
   def __init__(self, left, right):
     _expbool__c.__init__(self, (left, right,))
@@ -278,6 +294,7 @@ class Implies(_expbool__c):
     return None
 
 class Iff(_expbool__c):
+  """Class for the logical equivalence of booleans (identical to Eq)"""
   __slots__ = ()
   def __init__(self, left, right):
     _expbool__c.__init__(self, (left, right,))

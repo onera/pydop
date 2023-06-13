@@ -65,9 +65,14 @@ Module = type(importlib)
 
 _obj__ = object()
 
-def hasattr_static(obj, name): # inspect does not have a `hasattr_static` function
-  global _obj__
-  return (inspect.getattr_static(obj, name, default=_obj__) is not _obj__)
+def hasattr_static(obj, name):
+  # inspect does not have a `hasattr_static` function
+  # moreover, in python 3.10, `inspect.getattr_static` looks also in super-classes
+  try:
+    object.__getattribute__(obj, name)
+    return True
+  except AttributeError:
+    return False
 
 def isclass(obj): # the `inspect` version does not work with wrappers
   return issubclass(unwrap(obj.__class__), type)

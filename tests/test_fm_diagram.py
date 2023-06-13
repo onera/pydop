@@ -43,11 +43,24 @@ def test_simple_attribute():
   att_04 = Enum(tmp_2)
   att_05 = Int((1, 5), (9,None))
   att_06 = Float((None, 5), (9,10))
+  att_07 = Enum([1, "toto", None, bool])
 
   att_11 = List((4,None), Bool())
   att_12 = List(spec=Int(1,5))
   att_13 = List((4,), List(spec=Int(1,5)))
   
+
+  print("str of Class(tmp_1) =", att_01)
+  print("str of Bool() =", att_02)
+  print("str of String() =", att_03)
+  print("str of Enum(tmp_2) =", att_04)
+  print("str of Int((1, 5), (9,None)) =", att_05)
+  print("str of Float((None, 5), (9,10)) =", att_06)
+  print("str of Enum([1, \"toto\", None, bool]) =", att_07)
+  print("str of List((4,None), Bool()) =", att_11)
+  print("str of List(spec=Int(1,5)) =", att_12)
+  print("str of List((4,), List(spec=Int(1,5))) =", att_13)
+
   test = (
     (att_01, tmp_1(), True),        # test  0
     (att_01,       1, False),       # test  1
@@ -316,7 +329,7 @@ def test_fm_make_product():
   conf_base  = {'A':True, 'B': True, 'B0': True, 'B2': True, 'C': True, 'D': True, 'D0': True, 'E': True, 'E0': True, 'F':(3,)}
 
   tests = (
-    ((conf_empty,), True),
+    ((conf_empty,), False),
     ((conf_base, ), True),
     # B
     ((conf_base, {'B1': True}), True),

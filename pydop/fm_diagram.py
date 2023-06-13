@@ -22,6 +22,7 @@
 
 import itertools
 import enum
+import inspect
 
 from pydop.fm_result import decl_errors__c, reason_tree__c, eval_result__c
 from pydop.fm_constraint import _expbool__c, Var, Lit
@@ -169,64 +170,94 @@ def _check_domain(domain, value):
   else:
     return True
 
+def str_from_bound(bound, is_min):
+  if(bound is None):
+    if(is_min): return "]-infty"
+    else: return "infty["
+  else:
+    if(is_min): return f"[{bound}"
+    else: return f"{bound}["
+
+def str_from_interval(interval):
+  return f"{str_from_bound(interval[0], True)}, {str_from_bound(interval[1], False)}"
+def str_from_domain(domain):
+  if(bool(domain)):
+    return " ∪ ".join(map(str_from_interval, domain))
+  else:
+    return "]-infty, infty["
+
 ##########################################
 # 2. attribute specifications
 
-class _fdattribute_c(object): pass
+class _fdattribute_c(object):
+  """This is the super class of all attribute specification"""
+  pass
 
 class Class(_fdattribute_c):
+  """This specification enforce that the attribute must be of a specific class"""
   __slots__ = ("m_class")
   def __init__(self, domain):
     self.m_class = domain
   def __call__(self, value):
     return isinstance(value, self.m_class)
+  def __str__(self):
+    return self.m_class.__qualname__
 
-class Bool(Class):
-  __slots__ = ()
-  def __init__(self): Class.__init__(self, bool)
+def Bool():
+  """This specification enforce that the attribute must be a boolean"""
+  return Class(bool)
 
-class String(Class):
-  __slots__ = ()
-  def __init__(self):  Class.__init__(self, str)
+def String():
+  """This specification enforce that the attribute must be a string"""
+  return Class(str)
 
-class Enum(Class):
-  __slots__ = ()
+class Enum(_fdattribute_c):
+  """This specification enforce that the attribute must take the value of a specific set"""
+  __slots__ = ("m_domain",)
   def __init__(self, domain):
-    if(issubclass(domain, enum.Enum)):
-       Class.__init__(self, domain)
+    if(inspect.isclass(domain) and issubclass(domain, enum.Enum)):
+      self.m_domain = tuple(domain)
+    elif(isinstance(domain, (list, tuple, set, frozenset))):
+      self.m_domain = tuple(domain)
     else:
-      raise ValueError(f"ERROR: expected an enum class (found {domain})")
+      raise ValueError(f"ERROR: expected an enum class or a list/tuple/set of data (found {domain})")
+  def __call__(self, value):
+    return value in self.m_domain
+  def __str__(self):
+    return "∈ [" + ", ".join(map(str, self.m_domain)) + "]"
 
 class Int(Class):
+  """This specification enforce that the attribute must be an int within a specific domain (None means infinity)"""
   __slots__ = ("m_domain",)
   def __init__(self, *args):
     Class.__init__(self, int)
     self.m_domain = []
     _add_domain_spec(self.m_domain, args)
-
   def __call__(self, value):
     if(Class.__call__(self, value)):
       return _check_domain(self.m_domain, value)
     else:
       return False
-
-  def description(self):
-    return f'{self.m_domain[0][0]} <= x < {self.m_domain[0][1]}'
+  def __str__(self):
+    return "int ∈ " + str_from_domain(self.m_domain)
 
 class Float(Class):
+  """This specification enforce that the attribute must be a float within a specific domain (None means infinity)"""
   __slots__ = ("m_domain",)
   def __init__(self, *args):
     Class.__init__(self, float)
     self.m_domain = []
     _add_domain_spec(self.m_domain, args)
-
   def __call__(self, value):
     if(Class.__call__(self, value)):
       return _check_domain(self.m_domain, value)
     else:
       return False
+  def __str__(self):
+    return "float ∈ " + str_from_domain(self.m_domain)
 
 class List(Class):
+  """This specification enforce that the attribute must be a list whose values satisfy a specfication, and whose length is within a specific domain"""
   __slots__ = ("m_size", "m_kind",)
   def __init__(self, size=None, spec=None):
     Class.__init__(self, (list, tuple))
@@ -247,6 +278,8 @@ class List(Class):
               return False
           return True
     return False
+  def __str__(self):
+    return f"list({str(self.m_kind)}) of size ∈ " + str_from_domain(self.m_size)
 
 ################################################################################
 # Feature Diagrams, Generalized as Groups
