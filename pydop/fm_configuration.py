@@ -118,7 +118,7 @@ Raises KeyError if a name in `self` is not known by the resolver
       d_new = {}
       names = {}
       for key, val in d.items():
-        key_resolved = resolver.resolve(key, errors, None)
+        key_resolved = resolver.resolve(key, d, errors, None)
         if(key_resolved is not None):
           names[key_resolved] = key
           d_new[key_resolved] = val

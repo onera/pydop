@@ -20,9 +20,15 @@
 # Maintainer: Michael Lienhardt
 # email: michael.lienhardt@onera.fr
 
+"""
+This file contains all the classes used for error reporting,
+and a wrapper class `eval_result__c` around `bool` that stores a tree of errors hinting to why the bool is False
+"""
+
+
 import itertools
 
-from pydop.utils import _path_to_str__
+# from pydop.utils import _path_to_str__
 
 ################################################################################
 # error reporting
@@ -31,74 +37,89 @@ from pydop.utils import _path_to_str__
 ##########################################
 # 1. feature model naming consistency
 
+# TODO: check if the path parameter is necessary (I think not, it is the name provided by the user)
+
 class _unbound__c(object):
-  # when a name is not declared
-  __slots__ = ("m_name", "m_path",)
-  def __init__(self, name, path=None):
+  """This class states that a used variable name is not declared"""
+  __slots__ = ("m_name",)
+  def __init__(self, name):
+    """_unbound__c(name) -> _unbound__c
+States that `name` does not correspond to a declared variable
+    """
     self.m_name = name
-    self.m_path = path
   def __str__(self):
-    if(self.m_path is None):
-      return f"ERROR: variable \"{self.m_name}\" not declared"
-    else:
-      return f"ERROR: variable \"{self.m_name}\" not declared in (partial) path \"{_path_to_str__(self.m_path)}\""
+    return f"variable \"{self.m_name}\" not declared"
 
 class _ambiguous__c(object):
-  # when a partial path corresponds to several possibilities
-  __slots__ = ("m_name", "m_path", "m_paths",)
-  def __init__(self, name, path, paths):
+  """This class states that a used variable name is ambiguous (it corresponds to multiple variables)"""
+  __slots__ = ("m_name", "m_variables",)
+  def __init__(self, name, variables):
+    """_ambiguous__c(name, variables) -> _ambiguous__c
+States that `name` corresponds to the given set of variables
+    """
     self.m_name  = name
-    self.m_path  = path
-    self.m_paths = paths
+    self.m_variables = variables
   def __str__(self):
-    tmp = ", ".join(f"\"{_path_to_str__(p)}\"" for p in self.m_paths)
-    if(self.m_path is None):
-      return f"ERROR: reference \"{self.m_name}\" is ambiguous (corresponds to paths: {tmp})"
-    else:
-      return f"ERROR: reference \"{_path_to_str__(self.m_path)}[{self.m_name}]\" is ambiguous (corresponds to paths: {tmp})"
+    tmp = ", ".join(f"\"{p}\"" for p in self.m_paths)
+    return f"reference \"{self.m_name}\" is ambiguous (corresponds to variables: {tmp})"
 
 class _duplicate__c(object):
-  # when the same path correspond to the same object
-  __slots__ = ("m_path", "m_objs",)
-  def __init__(self, path, obj_main, obj_other):
-    self.m_path = path
-    self.m_objs = [obj_main, obj_other]
-  def add(self, obj):
-    self.m_objs.append(objs)
+  """This class states that an exact path is ambiguous (it corresponds to multiple variables)"""
+  __slots__ = ("m_variables",)
+  def __init__(self, variables):
+    """_duplicate__c(variables) -> _duplicate__c
+States that variables in parameters have the same identifier
+    """
+    self.m_variables = set(variables)
+  def add(self, *variables):
+    self.m_variables.update(variables)
+  def __len__(self): return len(self.m_variables)
   def __str__(self):
-    tmp = ", ".join(f"\"{type(obj)}\"" for obj in self.m_objs)
-    return f"ERROR: path \"{_path_to_str__(self.m_path)}\" correspond to more than one object (found types {tmp})"
+    tmp = ", ".join(f"\"{type(obj)}\"" for obj in self.m_variables)
+    return f"this path corresponds to more than one object (found types {tmp})"
 
 
 ## main class
 
 class decl_errors__c(object):
-  __slots__ = ("m_unbounds", "m_ambiguities", "m_duplicates",)
+  __slots__ = ("m_content",)
   def __init__(self):
-    self.m_unbounds = []
-    self.m_ambiguities = []
-    self.m_duplicates = {}
+    self.m_content = {}
 
-  def add_unbound(self, name, path=None):
-    self.m_unbounds.append(_unbound__c(name, path))
+  def add_unbound(self, name, location=None):
+    tmp = self._ensure_(location)
+    tmp[0].append(_unbound__c(name))
     return self
-  def add_ambiguous(self, name, path, paths):
-    self.m_unbounds.append(_ambiguous__c(name, path, paths))
+  def add_ambiguous(self, name, location, variables):
+    tmp = self._ensure_(location)
+    tmp[0].append(_ambiguous__c(name, variables))
     return self
-  def add_duplicate(self, path, obj_main, obj_other):
-    ref = self.m_duplicates.get(path)
-    if(ref is None):
-      self.m_duplicates[path] = _duplicate__c(path, obj_main, obj_other)
-    else:
-      ref.add(obj_main)
+  def add_duplicate(self, location, obj_main, obj_other):
+    tmp = self._ensure_(location)
+    tmp[1].add(obj_main, obj_other)
     return self
 
-  def __iter__(self):
-    return itertools.chain(iter(self.m_unbounds), iter(self.m_ambiguities), iter(self.m_duplicates.values()))
+  def _ensure_(self, location):
+    res = self.m_content.get(location)
+    if(res is None):
+      res = ([], _duplicate__c(set()))
+      self.m_content[location] = res
+    return res
+
   def __bool__(self):
-    return bool(self.m_unbounds) or bool(self.m_ambiguities) or bool(self.m_duplicates)
+    return bool(self.m_content)
   def __str__(self):
-    return "\n".join(str(el) for el in itertools.chain(self.m_unbounds, self.m_ambiguities, self.m_duplicates.values()))
+    return "\n".join(f"In {loc}:\n" + decl_errors__c._str_from_el_(el) for loc, el in self.m_content.items())
+
+  @staticmethod
+  def _str_from_el_(el):
+    res = "\n".join(f"  {error}" for error in el[0])
+    if(len(el[1]) > 1):
+      if(bool(res)):
+        res += f"\n  {el[1]}"
+    return res
+
+
 
 ##########################################
 # 2. constraint and fm evaluation
@@ -112,9 +133,9 @@ class _reason_value_mismatch__c(object):
   def update_ref(self, updater): self.m_ref = updater(self.m_ref)
   def __str__(self):
     if(expected is None):
-      return f"{self.m_ref} vs {self.m_val}"
+      return f"{self.m_ref} is {self.m_val}"
     else:
-      return f"{self.m_ref} vs {self.m_val} (expected: {self.m_expected})"
+      return f"{self.m_ref} is {self.m_val} (expected: {self.m_expected})"
 
 class _reason_value_none__c(object):
   __slots__ = ("m_ref",)

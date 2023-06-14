@@ -28,7 +28,7 @@ from pydop.fm_result import decl_errors__c, reason_tree__c, eval_result__c
 from pydop.fm_constraint import _expbool__c, Var, Lit
 from pydop.fm_configuration import configuration__c
 
-from pydop.utils import _empty__, _path_from_str__
+from pydop.utils import _empty__, path__c, lookup__c
 
 
 def _manage_parameter__(param):
@@ -41,84 +41,22 @@ def _manage_parameter__(param):
 
 
 
-################################################################################
-# path lookup class
-################################################################################
-
-class _lookup__c(object):
-  __slots__ = ("m_content")
-  def __init__(self):
-    self.m_content = {}
-
-  def insert(self, obj, path, errors):
-    name = path[-1]
-    decls = self.m_content.get(name)
-    if(decls is None):
-      self.m_content[name] = [ (obj, path) ]
-    else:
-      other = None
-      for obj_other, path_other in decls:
-        if(path == path_other):
-          other = obj_other
-          break
-      if(other is not None):
-        errors.add_duplicate(path, obj, other)
-      decls.append( (obj, path) )
-
-  def get(self, path, errors, default=None):
-    name = path[-1]
-    decls = self.m_content.get(name)
-    if(decls is None):
-      errors.add_unbound(name)
-    else:
-      refs = tuple(filter((lambda data: _lookup__c._path_includes__(data[1], path)), decls))
-      length = len(refs)
-      if(length == 0):
-        errors.add_unbound(name, path[:-1])
-      elif(length > 1):
-        errors.add_ambiguous(name, path[:-1], tuple(data[1] for data in refs))
-      else:
-        return refs[0][0]
-    return default
-
-  def get_with_path(self, path, suffix, errors, default=None):
-    path = path + _path_from_str__(suffix)
-    return self.get(path, errors, default)
-
-  def resolve(self, key, errors, default=None):
-    try:
-      key_path = _path_from_str__(key)
-      return self.get(key_path, errors, default)
-    except ValueError:
-      return default
-
-
-  @staticmethod
-  def _path_includes__(p, p_included):
-    # print(f"_path_includes__({p}, {p_included})")
-    idx_p = 0
-    idx_included = 0
-    len_p = len(p)
-    len_included = len(p_included)
-    while(idx_included < len_included):
-      if(idx_p < len_p):
-        if(p[idx_p] == p_included[idx_included]):
-          idx_included += 1
-        idx_p += 1
-      else:
-        # print("  => False")
-        return False
-    # print("  => True")
-    return True
-
 
 ################################################################################
 # feature model evaluation result
 ################################################################################
 
 class _eval_result_fd__c(eval_result__c):
+  """Extends the eval_result__c class to include the boolean value of the feature"""
   __slots__ = ("m_nvalue", "m_snodes")
   def __init__(self, value, reason, nvalue, snodes):
+    """_eval_result_fd__c(bool, reason_tree__c, bool, set[_fd__c]) -> _eval_result_fd__c
+Parameters:
+  `value` is the value of the boolean connective
+  `reason` is the reason tree for the value not being the expected one
+  `nvalue` is the value of the feature
+  `snodes` is the set of sub-features that are selected
+"""
     eval_result__c.__init__(self, value, reason)
     self.m_nvalue = nvalue  # the value of the current feature, used for propagation within a FD
     self.m_snodes = snodes  # the list of sub nodes that are True
@@ -140,20 +78,53 @@ class _eval_result_fd__c(eval_result__c):
 _NoneType = type(None)
 
 def _is_valid_bound(v):
+  """_is_valid_bound(object) -> bool
+returns if the object in parameter is a valid bound (either int, float or None for infinity)
+  """
   return isinstance(v, (int, float, _NoneType))
 
-def _add_domain_spec(l, spec):
-    if((len(spec) == 2) and _is_valid_bound(spec[0]) and _is_valid_bound(spec[1])):
-      spec = (spec,)
+def _is_valid_interval(v):
+  """_is_valid_interval(object) -> bool
+returns if the object in parameter is a valid interval (i.e., a pairs of bounds (a,b) with (a<=b))
+  """
+  if(isinstance(v, (tuple, list)) and (len(v) == 2) and _is_valid_bound(v[0]) and _is_valid_bound(v[1])):
+    if((v[0] is None) or (v[1] is None)): return True
+    else: return (v[0] <= v[1])
+  return False
 
-    for arg in spec:
-      if(not isinstance(arg, (float, int))):
-        if((not isinstance(arg, tuple)) or (len(arg) != 2) or (not (_is_valid_bound(arg[0]) and _is_valid_bound(arg[1])))):
-          raise ValueError(f"ERROR: expected domain specification (found {arg})")
-        else:
-          l.append(arg)
+def _is_valid_domain(v):
+  """_is_valid_domain(object) -> bool
+returns if the object in parameter is a valid interval (i.e., an ordered sequence of interval)
+  """
+  if(isinstance(v, (tuple, list))):
+    if(bool(v)):
+      curr = v[0]
+      if(not _is_valid_interval(curr)): return False
+      for succ in v[1:]:
+        if(not _is_valid_interval(succ)): return False
+        if((curr[1] is None) or (succ[0] is None) or (succ[0] <= curr[1])): return False
+    return True
+  return False
+
+
+
+def _add_domain_spec(l, spec):
+  """_add_domain_spec(domain, object) -> None
+Extends `l` (supposed to be a valid domain) with `spec`.
+Raises `ValueError` if `spec` is not an interval or a domain
+  """
+  if(_is_valid_interval(spec)): spec = (spec,)
+  elif(not _is_valid_domain(spec)):
+    ValueError(f"ERROR: expected interval or domain specification (found {spec})")
+
+  for arg in spec:
+    if(not isinstance(arg, (float, int))):
+      if((not isinstance(arg, tuple)) or (len(arg) != 2) or (not (_is_valid_bound(arg[0]) and _is_valid_bound(arg[1])))):
+        raise ValueError(f"ERROR: expected domain specification (found {arg})")
       else:
-        l.append((arg, arg+1))
+        l.append(arg)
+    else:
+      l.append((arg, arg+1))
 
 def _check_interval(interval, value):
   if((interval[0] is not None) and (value < interval[0])):
@@ -381,7 +352,7 @@ class _fd__c(object):
   def generate_lookup(self):
     if(self.m_lookup is None):
       self.m_errors = decl_errors__c()
-      self.m_lookup = _lookup__c()
+      self.m_lookup = lookup__c()
       self.m_dom    = {}
       self._generate_lookup_rec__([], 0, self.m_lookup, self.m_dom, self.m_errors)
     return self.m_errors
@@ -523,7 +494,7 @@ class _fd__c(object):
     # print(f"_generate_lookup_rec__([{self.__class__.__name__}]{self.m_name}, {idx}, {path_to_self}, {lookup}, {errors})")
     # 1. if local names, add it to the table, and check no duplicates
     path_to_self.append(str(idx) if(self.m_name is None) else self.m_name)
-    local_path = list(path_to_self)
+    local_path = path__c(tuple(path_to_self))
     if(self.m_name is not None):
       lookup.insert(self, local_path, errors)
       # _fd__c._check_duplicate__(self, self.m_name, local_path, lookup, errors)
@@ -533,7 +504,7 @@ class _fd__c(object):
       sub._generate_lookup_rec__(path_to_self, i, lookup, dom, errors)
     # 3. add attributes
     for att_def in self.m_attributes:
-      att_path = [*local_path, att_def[0]]
+      att_path = local_path + att_def[0]
       lookup.insert(att_def, att_path, errors)
       # _fd__c._check_duplicate__(att_def, att_def[0], local_path, lookup, errors)
       dom[att_def] = att_path
@@ -546,22 +517,11 @@ class _fd__c(object):
   # internal: configuration nf API
 
   def _link_configuration__(self, conf, errors):
-    if(isinstance(conf, configuration__c)):
-      if(conf.m_resolver is self.m_lookup):
-        return conf # already linked
-      conf = conf.unlink().m_dict
-    if(self.m_norm is not None):
-      conf = self.m_norm(self, conf)
-    linked = {}
-    names = {}
-    for key, val in conf.items():
-      if(isinstance(key, str)):
-        key_resolved = self.m_lookup.get(_path_from_str__(key), errors, None)
-        if(key_resolved is not None):
-          names[key_resolved] = key
-          key = key_resolved
-      linked[key] = val
-    return configuration__c(linked, self.m_lookup.resolve, names)
+    if(isinstance(conf, dict)):
+      conf = configuration__c(conf)
+    elif(not isinstance(conf, configuration__c)):
+      raise ValueError(f"ERROR: a configuration must be either a configuration__c or a dict (found {type(conf)})")
+    return conf.link(self.m_lookup)
 
   def _close_configuration_1__(self, is_true_d):
     idx, v_local, v_subs = self._infer_sv__(is_true_d)

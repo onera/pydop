@@ -29,7 +29,7 @@ import itertools
 
 from pydop.fm_result import decl_errors__c, reason_tree__c, eval_result__c
 from pydop.fm_configuration import configuration__c
-from pydop.utils import _empty__
+from pydop.utils import _empty__, lookup_wrapper__c
 
 ################################################################################
 # Boolean constraints
@@ -39,17 +39,28 @@ from pydop.utils import _empty__
 # 1. main class (for all non leaf behavior)
 
 class _expbool__c(object):
+  """Core abstract class containing most functionalities of boolean expressions"""
   __slots__ = ("m_content", "m_vars",)
   def __init__(self, content):
+    """_expbool__c(iterable) -> _expbool__c
+Generic constructor that stores a tuple of the boolean-version of the elements in the parameter
+    """
     self.m_content = tuple(_expbool__c._manage_parameter__(param) for param in content)
     self.m_vars = None
 
-  def get_name(self): return self.__class__.__name__
+  def get_name(self):
+    """get_name() -> str
+Return the name of the boolean (i.e., the name of `self`'s class)
+    """
+    return self.__class__.__name__
   def __str__(self): return f"{self.get_name()}({', '.join(str(el) for el in self.m_content)})"
 
   ## constraint API
 
   def __call__(self, product, idx=None, expected=True):
+    """self(dict/configuration) -> eval_result__c
+self(dict/configuration, , bool) -> eval_result__c
+Evaluates the value of the boolean expression w.r.t. the product in parameter"""
     # print(f"{self.__class__.__name__}.__call__({product}, {idx}, {expected})")
     # results = tuple(_expbool__c._eval_generic__(el, product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
     results = tuple(el(product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
@@ -143,7 +154,8 @@ The parameter is the id of the variable
   def __str__(self): return f"Var({self.m_content})"
 
   def _link__(self, path, resolver, errors):
-    return Var(resolver.get_with_path(path, self.m_content, errors, self.m_content))
+    resolver = lookup_wrapper__c(resolver, path)
+    return Var(resolver.get(self.m_content, path, errors, self.m_content))
 
   def _vars_update(self, s):
     s.add(self.m_content)
