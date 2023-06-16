@@ -28,7 +28,7 @@ from pydop.fm_result import decl_errors__c, reason_tree__c, eval_result__c
 from pydop.fm_constraint import _expbool__c, Var, Lit
 from pydop.fm_configuration import configuration__c
 
-from pydop.utils import _empty__, path__c, lookup__c
+from pydop.utils import _empty__, path__c, lookup__c, domain__c
 
 
 def _manage_parameter__(param):
@@ -68,97 +68,6 @@ Parameters:
 # Attribute Specification
 ################################################################################
 
-##########################################
-# 1. domains
-
-# domains are either a single interval or a list of intervals
-# an interval is a pair of integer/float/None values (None state infinite bound)
-# e.g., (None, None) is a domain, as well as [(None, -1), (3, 5), (5, None)]
-
-_NoneType = type(None)
-
-def _is_valid_bound(v):
-  """_is_valid_bound(object) -> bool
-returns if the object in parameter is a valid bound (either int, float or None for infinity)
-  """
-  return isinstance(v, (int, float, _NoneType))
-
-def _is_valid_interval(v):
-  """_is_valid_interval(object) -> bool
-returns if the object in parameter is a valid interval (i.e., a pairs of bounds (a,b) with (a<=b))
-  """
-  if(isinstance(v, (tuple, list)) and (len(v) == 2) and _is_valid_bound(v[0]) and _is_valid_bound(v[1])):
-    if((v[0] is None) or (v[1] is None)): return True
-    else: return (v[0] <= v[1])
-  return False
-
-def _is_valid_domain(v):
-  """_is_valid_domain(object) -> bool
-returns if the object in parameter is a valid interval (i.e., an ordered sequence of interval)
-  """
-  if(isinstance(v, (tuple, list))):
-    if(bool(v)):
-      curr = v[0]
-      if(not _is_valid_interval(curr)): return False
-      for succ in v[1:]:
-        if(not _is_valid_interval(succ)): return False
-        if((curr[1] is None) or (succ[0] is None) or (succ[0] <= curr[1])): return False
-    return True
-  return False
-
-
-
-def _add_domain_spec(l, spec):
-  """_add_domain_spec(domain, object) -> None
-Extends `l` (supposed to be a valid domain) with `spec`.
-Raises `ValueError` if `spec` is not an interval or a domain
-  """
-  if(_is_valid_interval(spec)): spec = (spec,)
-  elif(not _is_valid_domain(spec)):
-    ValueError(f"ERROR: expected interval or domain specification (found {spec})")
-
-  for arg in spec:
-    if(not isinstance(arg, (float, int))):
-      if((not isinstance(arg, tuple)) or (len(arg) != 2) or (not (_is_valid_bound(arg[0]) and _is_valid_bound(arg[1])))):
-        raise ValueError(f"ERROR: expected domain specification (found {arg})")
-      else:
-        l.append(arg)
-    else:
-      l.append((arg, arg+1))
-
-def _check_interval(interval, value):
-  if((interval[0] is not None) and (value < interval[0])):
-    return False
-  if((interval[1] is not None) and (value >= interval[1])):
-    return False
-  return True
-
-def _check_domain(domain, value):
-  if(domain):
-    for i in domain:
-      if(_check_interval(i, value)): return True
-    return False
-  else:
-    return True
-
-def str_from_bound(bound, is_min):
-  if(bound is None):
-    if(is_min): return "]-infty"
-    else: return "infty["
-  else:
-    if(is_min): return f"[{bound}"
-    else: return f"{bound}["
-
-def str_from_interval(interval):
-  return f"{str_from_bound(interval[0], True)}, {str_from_bound(interval[1], False)}"
-def str_from_domain(domain):
-  if(bool(domain)):
-    return " ∪ ".join(map(str_from_interval, domain))
-  else:
-    return "]-infty, infty["
-
-##########################################
-# 2. attribute specifications
 
 class _fdattribute_c(object):
   """This is the super class of all attribute specification"""
@@ -202,45 +111,41 @@ class Int(Class):
   __slots__ = ("m_domain",)
   def __init__(self, *args):
     Class.__init__(self, int)
-    self.m_domain = []
-    _add_domain_spec(self.m_domain, args)
+    self.m_domain = domain__c(*args)
   def __call__(self, value):
     if(Class.__call__(self, value)):
-      return _check_domain(self.m_domain, value)
+      return self.m_domain.contains(value)
     else:
       return False
   def __str__(self):
-    return "int ∈ " + str_from_domain(self.m_domain)
+    return "int ∈ " + str(self.m_domain)
 
 class Float(Class):
   """This specification enforce that the attribute must be a float within a specific domain (None means infinity)"""
   __slots__ = ("m_domain",)
   def __init__(self, *args):
     Class.__init__(self, float)
-    self.m_domain = []
-    _add_domain_spec(self.m_domain, args)
+    self.m_domain = domain__c(*args)
   def __call__(self, value):
     if(Class.__call__(self, value)):
-      return _check_domain(self.m_domain, value)
+      return self.m_domain.contains(value)
     else:
       return False
   def __str__(self):
-    return "float ∈ " + str_from_domain(self.m_domain)
+    return "float ∈ " + str(self.m_domain)
 
 class List(Class):
   """This specification enforce that the attribute must be a list whose values satisfy a specfication, and whose length is within a specific domain"""
   __slots__ = ("m_size", "m_kind",)
-  def __init__(self, size=None, spec=None):
+  def __init__(self, size=(), spec=None):
     Class.__init__(self, (list, tuple))
-    self.m_size = []
-    if(size is not None):
-      _add_domain_spec(self.m_size, size)
+    self.m_size = domain__c(*size)
     self.m_kind = spec
 
   def __call__(self, value):
     if(Class.__call__(self, value)):
       # print(f"_check_domain({self.m_size}, {len(value)}) = {_check_domain(self.m_size, len(value))}")
-      if(_check_domain(self.m_size, len(value))):
+      if(self.m_size.contains(len(value))):
         if(self.m_kind is None):
           return True
         else:
@@ -250,7 +155,7 @@ class List(Class):
           return True
     return False
   def __str__(self):
-    return f"list({str(self.m_kind)}) of size ∈ " + str_from_domain(self.m_size)
+    return f"list({str(self.m_kind)}) of size ∈ " + str(self.m_size)
 
 ################################################################################
 # Feature Diagrams, Generalized as Groups
@@ -358,23 +263,21 @@ class _fd__c(object):
     return self.m_errors
 
   def link_constraint(self, c):
-    if(self.m_lookup is None):
-      raise ValueError(f"ERROR: a non-root feature cannot link a constraint (detected feature \"{self}\").\nDid you forget to call \"generate_lookup\"?")
+    self._check_lookup_("link a constraint")
+
     errors = decl_errors__c()
     c = _expbool__c._manage_parameter__(c)
-    res = c._link__(self.m_dom[self], self.m_lookup, errors)
+    res = c.link(path__c(()), self.m_lookup, errors)
     return (res, errors)
 
   def link_configuration(self, conf):
-    if(self.m_lookup is None):
-      raise ValueError(f"ERROR: a non-root feature cannot link a configuration (detected feature \"{self}\").\nDid you forget to call \"generate_lookup\"?")
+    self._check_lookup_("link a configuration")
     errors = decl_errors__c()
     res = self._link_configuration__(conf, errors)
     return (res, errors)
 
   def close_configuration(self, *confs):
-    if(self.m_lookup is None):
-      raise ValueError(f"ERROR: a non-root feature cannot close a configuration (detected feature \"{self}\").\nDid you forget to call \"generate_lookup\"?")
+    self._check_lookup_("close a configuration")
     errors = decl_errors__c()
     is_true_d = {}
     names = {}
@@ -395,12 +298,15 @@ class _fd__c(object):
     else: self._close_configuration_2__(v_local[0], is_true_d, res)
     return (configuration__c(res, self.m_lookup.resolve, names), errors)
 
+  def _check_lookup_(self, op):
+    if(self.m_lookup is None):
+      raise ValueError(f"ERROR: an unchecked feature cannot {op} (detected feature \"{self}\").\nDid you forget to call \"check()\"?")
+
   ##########################################
   # call API
 
   def __call__(self, conf, expected=True):
-    if(self.m_dom is None):
-      raise ValueError("ERROR: evaluating a non well-formed Feature Model (call 'check()' on it before)")
+    self._check_lookup_("be called")
     res = self._eval_generic__(conf, _fd__c._f_get_deep__, expected)
     reason = res.m_reason
     if(reason):
@@ -494,7 +400,7 @@ class _fd__c(object):
     # print(f"_generate_lookup_rec__([{self.__class__.__name__}]{self.m_name}, {idx}, {path_to_self}, {lookup}, {errors})")
     # 1. if local names, add it to the table, and check no duplicates
     path_to_self.append(str(idx) if(self.m_name is None) else self.m_name)
-    local_path = path__c(tuple(path_to_self))
+    local_path = path__c(path_to_self)
     if(self.m_name is not None):
       lookup.insert(self, local_path, errors)
       # _fd__c._check_duplicate__(self, self.m_name, local_path, lookup, errors)
@@ -509,7 +415,7 @@ class _fd__c(object):
       # _fd__c._check_duplicate__(att_def, att_def[0], local_path, lookup, errors)
       dom[att_def] = att_path
     # 4. check ctcs
-    self.m_ctcs = tuple(ctc._link__(local_path, lookup, errors) for ctc in self.m_ctcs)
+    self.m_ctcs = tuple(ctc.link(local_path, lookup, errors) for ctc in self.m_ctcs)
     # 5. reset path_to_self
     path_to_self.pop()
 

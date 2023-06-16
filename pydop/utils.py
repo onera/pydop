@@ -22,6 +22,7 @@
 
 
 import itertools
+import bisect
 
 ##########################################
 # the empty object, for get API
@@ -73,14 +74,16 @@ class path__c(tuple):
   def __add__(self, suffix):
     return path__c(itertools.chain(self, path__c._manage_parameter_(suffix)))
   def __str__(self):
-    return "/".join(map(str, self))
+    return "/" + "/".join(map(str, self))
+  def __getitem__(self, key):
+    if(isinstance(key, int)): return tuple.__getitem__(self, key)
+    else: return path__c(tuple.__getitem__(self, key))
 
   @staticmethod
   def _manage_parameter_(param):
     if(isinstance(param, str)):
       param = param.split('/')
     return param
-
 
 
 
@@ -124,7 +127,7 @@ If the path corresponds to multiple objects, adds an abiguous error to `errors` 
     name = path[-1]
     decls = self.m_content.get(name)
     if(decls is None):
-      errors.add_unbound(name)
+      errors.add_unbound(name, path[:-1])
     else:
       refs = tuple(filter((lambda data: lookup__c._path_includes__(data[1], path)), decls))
       length = len(refs)
@@ -191,10 +194,117 @@ class lookup_wrapper__c(object):
 
 
 
+################################################################################
+# intervals and domains
+################################################################################
+
+float_inf_minus = float("-inf")
+float_inf_plus  = float("inf")
+
+def is_valid_bound(v):
+  """is_valid_bound(object) -> bool
+returns if the object in parameter is a valid bound (either int or a float)
+  """
+  return isinstance(v, (int, float,))
+
+def is_valid_bound_ext(v):
+  """is_valid_bound_ext(object) -> bool
+returns if the object in parameter is a valid extended bound (either int, float or None for infinity)
+  """
+  return ((v is None) or is_valid_bound(v))
 
 
-##########################################
-# for debug
+def _nf_of_bound_(b, is_min):
+  if(b is None):
+    if(is_min): return float_inf_minus
+    else: return float_inf_plus
+  else:
+    return b
+
+
+def _interval_error_(obj): return ValueError(f"ERROR: an interval must be a pair (a,b) with a<b (found {obj})")
+
+class interval__c(tuple):
+  __slots__ = ()
+  def __new__(cls, v_min, v_max):
+    v_min = _nf_of_bound_(v_min, True)
+    v_max = _nf_of_bound_(v_max, False)
+    if(is_valid_bound(v_min) and  is_valid_bound(v_max) and (v_min <= v_max)):
+      return tuple.__new__(interval__c, (v_min, v_max))
+    else: raise _interval_error_((v_min, v_max))
+
+  def contains(self, value):
+    return ((self[0] <= value) and (value < self[1]))
+  def __str__(self):
+    if(self[0] == float_inf_minus): return f"]{self[0]}, {self[1]}["
+    else: return f"[{self[0]}, {self[1]}["
+
+def interval_min(v): return v[0]
+def interval_max(v): return v[1]
+
+def interval_of_obj(obj):
+  if(isinstance(obj, interval__c)): return obj
+  elif(isinstance(obj, int)): return interval__c(obj, obj+1)
+  elif(isinstance(obj, (list, tuple)) and (len(obj) == 2)):
+    return interval__c(obj[0], obj[1])
+  else:
+    raise _interval_error_(obj)
+
+def _extend_dlist_interval_(dlist, v):
+  v_min, v_max = v
+  idx_min = bisect.bisect(dlist, v_min, key=interval_min)
+  idx_max = bisect.bisect(dlist, v_max, key=interval_max)
+  if(idx_min == 0):
+    if(idx_max == len(dlist)): return [v]
+    else:
+      v_next = dlist[idx_max]
+      if(v_next[0] <= v_max):
+        return [interval__c(v_min, v_next[1]), *dlist[idx_max+1:]]
+      else:
+        return  [v, *dlist[idx_max:]]
+  else:
+    v_prev = dlist[idx_min-1]
+    if(v_min <= v_prev[1]):
+      idx_min -= 1
+      v_min = v_prev[0]
+    if(idx_max == len(dlist)): return [*dlist[:idx_min], interval__c(v_min, v_max)]
+    else:
+      v_next = dlist[idx_max]
+      if(v_next[0] <= v_max):
+        if(idx_min < 0): return [interval__c(v_min, v_next[1]), *dlist[idx_max+1:]]
+        else: return [*dlist[:idx_min], interval__c(v_min, v_next[1]), *dlist[idx_max+1:]]
+      else:
+        if(idx_min < 0): return [interval__c(v_min, v_max), *dlist[idx_max:]]
+        return [*dlist[:idx_min], interval__c(v_min, v_max), *dlist[idx_max:]]
+
+class domain__c(tuple):
+  __slots__ = ()
+  def __new__(cls, *args):
+    if((len(args) == 2) and (is_valid_bound_ext(args[0])) and (is_valid_bound_ext(args[1]))):
+      args = (interval__c(args[0], args[1]),)
+    elif((len(args) == 1) and isinstance(args[0], int)):
+      args = (interval__c(args[0], args[0]+1),)
+    res = []
+    for arg in args:
+      res = _extend_dlist_interval_(res, interval_of_obj(arg))
+    return tuple.__new__(domain__c, res)
+  def contains(self, value):
+    if(bool(self)):
+      idx = bisect.bisect(self, value, key=interval_min)
+      return (0 < idx) and (value < self[idx-1][1])
+    else: return True
+  def __str__(self):
+    if(bool(self)):
+      return " ∪ ".join(map(str, self))
+    else:
+      return "]-inf, inf["
+
+
+
+################################################################################
+# for debugging
+################################################################################
+
 indent_counter = 0
 
 def wrap_start_end(f):

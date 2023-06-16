@@ -60,12 +60,12 @@ Return the name of the boolean (i.e., the name of `self`'s class)
   def __call__(self, product, idx=None, expected=True):
     """self(dict/configuration) -> eval_result__c
 self(dict/configuration, , bool) -> eval_result__c
-Evaluates the value of the boolean expression w.r.t. the product in parameter"""
+Evaluates the value of the boolean expression w.r.t. the product in parameter
+    """
     # print(f"{self.__class__.__name__}.__call__({product}, {idx}, {expected})")
     # results = tuple(_expbool__c._eval_generic__(el, product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
     results = tuple(el(product, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
     values = tuple(el.value() for el in results)
-    # print(f"  => values  = {values}")
     res = self._compute__(values)
     if(res == expected):
       reason = None
@@ -86,8 +86,8 @@ Evaluates the value of the boolean expression w.r.t. the product in parameter"""
     else:
       return Lit(param)
 
-  def _link__(self, path, mapping, errors):
-    res = _expbool__c(tuple(map((lambda sub: sub._link__(path, mapping, errors)), self.m_content)))
+  def link(self, location, resolver, errors):
+    res = _expbool__c(tuple(map((lambda sub: sub.link(location, resolver, errors)), self.m_content)))
     res.__class__ = self.__class__
     return res
 
@@ -153,9 +153,9 @@ The parameter is the id of the variable
     return eval_result__c(res, reason)
   def __str__(self): return f"Var({self.m_content})"
 
-  def _link__(self, path, resolver, errors):
-    resolver = lookup_wrapper__c(resolver, path)
-    return Var(resolver.get(self.m_content, path, errors, self.m_content))
+  def link(self, location, resolver, errors):
+    resolver = lookup_wrapper__c(resolver, location)
+    return Var(resolver.resolve(self.m_content, location, errors, self.m_content))
 
   def _vars_update(self, s):
     s.add(self.m_content)
@@ -174,7 +174,7 @@ The parameter is the wrapped object
     return eval_result__c(self.m_content, None)
   def __str__(self): return f"Lit({self.m_content})"
 
-  def _link__(self, path, mapping, errors):
+  def link(self, location, resolver, errors):
     return self
 
   def _vars_update(self, s): pass

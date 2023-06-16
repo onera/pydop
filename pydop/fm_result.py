@@ -37,8 +37,6 @@ import itertools
 ##########################################
 # 1. feature model naming consistency
 
-# TODO: check if the path parameter is necessary (I think not, it is the name provided by the user)
-
 class _unbound__c(object):
   """This class states that a used variable name is not declared"""
   __slots__ = ("m_name",)
@@ -60,7 +58,7 @@ States that `name` corresponds to the given set of variables
     self.m_name  = name
     self.m_variables = variables
   def __str__(self):
-    tmp = ", ".join(f"\"{p}\"" for p in self.m_paths)
+    tmp = ", ".join(f"\"{p}\"" for p in self.m_variables)
     return f"reference \"{self.m_name}\" is ambiguous (corresponds to variables: {tmp})"
 
 class _duplicate__c(object):
@@ -75,26 +73,37 @@ States that variables in parameters have the same identifier
     self.m_variables.update(variables)
   def __len__(self): return len(self.m_variables)
   def __str__(self):
-    tmp = ", ".join(f"\"{type(obj)}\"" for obj in self.m_variables)
-    return f"this path corresponds to more than one object (found types {tmp})"
+    tmp = ", ".join(f"\"{obj}\"" for obj in self.m_variables)
+    return f"this path corresponds to more than one object (found {tmp})"
 
 
 ## main class
 
 class decl_errors__c(object):
+  """This is a global class managing all naming errors during analysis."""
   __slots__ = ("m_content",)
   def __init__(self):
+    """decl_errors__c() -> decl_errors__c"""
     self.m_content = {}
 
-  def add_unbound(self, name, location=None):
+  def add_unbound(self, name, location):
+    """add_unbound(str, path__c) -> None
+Adds the error that `name` does not correspond to any variable in `location`
+    """
     tmp = self._ensure_(location)
     tmp[0].append(_unbound__c(name))
     return self
   def add_ambiguous(self, name, location, variables):
+    """add_ambiguous(str, path__c, set[object]) -> None
+Adds the error that `name` corresponds to several variables in `location`
+    """
     tmp = self._ensure_(location)
     tmp[0].append(_ambiguous__c(name, variables))
     return self
   def add_duplicate(self, location, obj_main, obj_other):
+    """add_duplicate(str, path__c, object, object) -> None
+Adds the error that `location/name` is the unique path of the two variables `obj_main`  and `obj_other`
+    """
     tmp = self._ensure_(location)
     tmp[1].add(obj_main, obj_other)
     return self
@@ -108,6 +117,11 @@ class decl_errors__c(object):
 
   def __bool__(self):
     return bool(self.m_content)
+  def __iter__(self):
+    for loc, el in self.m_content.items():
+      for sub in el[0]:
+        yield (loc, sub)
+      if(len(el[1]) > 1): yield (loc, el[1])
   def __str__(self):
     return "\n".join(f"In {loc}:\n" + decl_errors__c._str_from_el_(el) for loc, el in self.m_content.items())
 
@@ -115,8 +129,8 @@ class decl_errors__c(object):
   def _str_from_el_(el):
     res = "\n".join(f"  {error}" for error in el[0])
     if(len(el[1]) > 1):
-      if(bool(res)):
-        res += f"\n  {el[1]}"
+      if(bool(res)): res += f"\n  {el[1]}"
+      else: res = f"  {el[1]}"
     return res
 
 
@@ -132,7 +146,7 @@ class _reason_value_mismatch__c(object):
     self.m_expected = expected
   def update_ref(self, updater): self.m_ref = updater(self.m_ref)
   def __str__(self):
-    if(expected is None):
+    if(self.m_expected is None):
       return f"{self.m_ref} is {self.m_val}"
     else:
       return f"{self.m_ref} is {self.m_val} (expected: {self.m_expected})"
@@ -156,19 +170,6 @@ class _reason_dependencies__c(object):
   def __str__(self):
     tmp = ', '.join(f"\"{el}\"" for el in self.m_deps)
     return f"{self.m_ref} should be True due to dependencies (found: {tmp})"
-
-class _reason_value_mismatch__c(object):
-  __slots__ = ("m_name", "m_ref", "m_val", "m_expected",)
-  def __init__(self, ref, val, expected=None):
-    self.m_ref = ref
-    self.m_val = val
-    self.m_expected = expected
-  def update_ref(self, updater): self.m_ref = updater(self.m_ref)
-  def __str__(self):
-    if(self.m_expected is None):
-      return f"{self.m_ref} vs {self.m_val}"
-    else:
-      return f"{self.m_ref} vs {self.m_val} (expected: {self.m_expected})"
 
 class _reason_value_none__c(object):
   __slots__ = ("m_ref",)

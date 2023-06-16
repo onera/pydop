@@ -30,15 +30,15 @@ def test_declaration():
   errors = decl_errors__c()
   assert(not bool(errors))
 
-  ## 2. unbound
-  not_declared = "not_declared"
-  errors = decl_errors__c()
-  assert(not bool(errors))
-  res = errors.add_unbound(not_declared)
-  assert(bool(errors))
-  assert(len(tuple(iter(errors))) == 1)
-  assert(str(errors) == f"ERROR: variable \"{not_declared}\" not declared")
-  assert(res is errors)
+  # ## 2. unbound
+  # not_declared = "not_declared"
+  # errors = decl_errors__c()
+  # assert(not bool(errors))
+  # res = errors.add_unbound(not_declared, )
+  # assert(bool(errors))
+  # assert(len(tuple(iter(errors))) == 1)
+  # assert(str(errors) == f"ERROR: variable \"{not_declared}\" not declared")
+  # assert(res is errors)
 
   not_declared = "not_declared"
   in_path = "in_path"
@@ -47,7 +47,7 @@ def test_declaration():
   res = errors.add_unbound(not_declared, in_path)
   assert(bool(errors))
   assert(len(tuple(iter(errors))) == 1)
-  assert(str(errors) == f"ERROR: variable \"{not_declared}\" not declared in (partial) path \"{in_path}\"")
+  assert(str(errors) == f"In {in_path}:\n  variable \"{not_declared}\" not declared")
   assert(res is errors)
 
   ## 3. ambiguity
@@ -59,7 +59,7 @@ def test_declaration():
   assert(bool(errors))
   tmp = ", ".join(f"\"{p}\"" for p in paths[1:])
   assert(len(tuple(iter(errors))) == 1)
-  assert(str(errors) == f"ERROR: reference \"{paths[0]}[{ref}]\" is ambiguous (corresponds to paths: {tmp})")
+  assert(str(errors) == f"In {paths[0]}:\n  reference \"{ref}\" is ambiguous (corresponds to variables: {tmp})")
   assert(res is errors)
 
   ## 4. duplicate
@@ -71,10 +71,12 @@ def test_declaration():
   res = errors.add_duplicate(in_path, ref_1, ref_2)
   assert(bool(errors))
   assert(len(tuple(iter(errors))) == 1)
-  # print(str(errors))
-  tmp = ', '.join(f"\"{str(type(el))}\"" for el in (ref_1, ref_2))
-  # print(f"ERROR: path \"{in_path}\" correspond to more than one object (found types {tmp})")
-  assert(str(errors) == f"ERROR: path \"{in_path}\" correspond to more than one object (found types {tmp})")
+  tmp1 = ', '.join(f"\"{str(el)}\"" for el in (ref_1, ref_2))
+  tmp2 = ', '.join(f"\"{str(el)}\"" for el in (ref_2, ref_1))
+  assert (
+    (str(errors) == f"In {in_path}:\n  this path corresponds to more than one object (found {tmp1})")
+    or (str(errors) == f"In {in_path}:\n  this path corresponds to more than one object (found {tmp2})")
+  )
   assert(res is errors)
 
   ## 5. arity
@@ -107,7 +109,7 @@ def test_reason_tree():
   res = errors.add_reason_value_mismatch(ref_val, 1, 2)
   assert(bool(errors))
   assert(len(tuple(iter(errors))) == 1)
-  assert(str(errors) == f"{ref}: {ref_val} vs {1} (expected: {2})")
+  assert(str(errors) == f"{ref}: {ref_val} is {1} (expected: {2})")
   assert(res is errors)
 
   ## 2. none
@@ -149,7 +151,7 @@ def test_reason_tree():
   res = errors.add_reason_sub(eval_result__c(True, reason_tree__c(ref_sub, 0).add_reason_value_mismatch(ref_val, 1, 2)))
   assert(bool(errors))
   assert(len(tuple(iter(errors))) == 1)
-  assert(str(errors) == f"{ref}: {ref_sub}: {ref_val} vs {1} (expected: {2})")
+  assert(str(errors) == f"{ref}: {ref_sub}: {ref_val} is {1} (expected: {2})")
   assert(res is errors)
 
   ## 5. arity
@@ -183,7 +185,7 @@ def test_reason_tree():
     else:
       return s
   errors.update_ref(updater)
-  assert(str(errors) == f"{ref_sub}: {ref}: {ref_val_2} vs {1} (expected: {2})")
+  assert(str(errors) == f"{ref_sub}: {ref}: {ref_val_2} is {1} (expected: {2})")
 
 
 
