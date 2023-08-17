@@ -41,32 +41,6 @@ _empty__ = _empty_c__()
 # path manipulation
 ################################################################################
 
-def _is_str_(s):
-  """_is_str_(object) -> bool
-Returns if the object in parameter is a string
-  """
-  return isinstance(s, str)
-
-
-def _path_from_str__(s):
-  """convert a string, tuple or list into a path"""
-  if(_is_str_(s)):
-    return s.split('/')
-  elif(isinstance(s, (tuple, list))):
-    return s
-  raise ValueError(f"ERROR: unexpected path type (expected str, tuple or list, found {type(s)})")
-
-def _path_to_str__(path):
-  if(_is_str_(path)):
-    return path
-  elif(isinstance(path, (tuple, list))):
-    if(all(map((lambda e: isinstance(e, str)), path))):
-      return "/".join(path)
-  elif(isinstance(path, type(None))):
-    return "None"
-  raise ValueError(f"ERROR: unexpected path type (expected str, tuple or list, found {type(path)})")
-
-
 class path__c(tuple):
   __slots__ = ()
   def __new__(cls, content=()):
@@ -81,10 +55,16 @@ class path__c(tuple):
 
   @staticmethod
   def _manage_parameter_(param):
+    """Flatten the elements in parameter"""
     if(isinstance(param, str)):
-      param = param.split('/')
-    return param
-
+      yield from param.split('/')
+    else:
+      try:
+        for el in param:
+          yield from path__c._manage_parameter_(el)
+      except TypeError as e:
+        print(e, dir(e), e.args)
+        yield param
 
 
 ################################################################################

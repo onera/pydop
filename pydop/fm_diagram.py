@@ -32,17 +32,6 @@ from pydop.utils import _empty__, path__c, lookup__c, domain__c
 from pydop.utils import dimacs__c, anot
 
 
-def _manage_parameter__(param):
-  if(isinstance(param, str)):
-    return Var(param)
-  elif(isinstance(param, bool)):
-    return Lit(param)
-  else:
-    return param
-
-
-
-
 ################################################################################
 # feature model evaluation result
 ################################################################################
@@ -162,100 +151,118 @@ class List(Class):
 # Feature Diagrams, Generalized as Groups
 ################################################################################
 
-_default_product_normalization = None
-
-def set_default_product_normalization(f):
-  global _default_product_normalization
-  _default_product_normalization = f
-
-
 ##########################################
 # 1. core implementation
 
 class _fd__c(object):
-  __slots__ = (
-    "m_norm",       # the product normalization function
-    "m_name",       # the optional name of the feature (anonym nodes are possible)
-    "m_content",    # the childrens of the current feature
-    "m_ctcs",       # the cross-tree constraints at this feature level
-    "m_attributes", # the attribute of the feature
+  __slots_main__ = ( # those are the main attributes of a _fd__c object, extended with user-defined specific information
+    "name",       # the optional name of the feature (anonym nodes are possible)
+    "children",   # the childrens of the current feature
+    "ctcs",       # the cross-tree constraints at this feature level
+    "attributes", # the attributes of the feature
     # the following fields are generated only at the root feature of a FD
-    "m_lookup",     # mapping {name: [(feature_obj, path)]}: the keys are all the feature/attributes names in the current tree, and the list are all the elements having that name, with their relative path (in tuple format)
-    "m_dom",        # mapping {feature_obj -> path}: lists all the features/attributes in the current, and give their path (in string format)
+    "m_lookup",   # mapping {name: [(feature_obj, path)]}: the keys are all the feature/attributes names in the current tree, and the list are all the elements having that name, with their relative path (in tuple format)
+    "m_dom",      # mapping {feature_obj -> path}: lists all the features/attributes in the current, and give their path (in string format)
     # the following field is only used at the root feature of a FD during its evaluation
-    "m_errors"      # a reason_tree__c object listing all the errors encountered during the evaluation of the FD
+    "m_errors",   # a reason_tree__c object listing all the errors encountered during the evaluation of the FD
   )
 
   ##########################################
   # constructor API
 
   def __init__(self, *args, **kwargs):
-  # def __init__(self, name, content, ctcs, attributes):
-    global _default_product_normalization
-    name, content, ctcs, attributes = _fd__c._manage_constructor_args__(*args, **kwargs)
-    self.m_norm = _default_product_normalization
-    self.m_name = name
-    self.m_content = content
-    self.m_ctcs = ctcs
-    self.m_attributes = attributes
-    self.clean()
+    """_fd__c(*args, **kwargs) -> _fd__c
+Parameters:
+  `args` contains the optional name of the feature (of type str), its subtrees (of type _fd__c) and its cross-tree constraints (the rest)
+  `kwargs` contains the attributes (of type _fdattribute_c) and the tags of the feature (the rest)
+    """
+    name, content, ctcs, attributes, tags = _fd__c._manage_constructor_args__(*args, **kwargs)
+    self.name = name
+    self.children = content
+    self.ctcs = ctcs
+    self.attributes = attributes
 
-  def set_product_normalization(self, f):
-    self.m_norm = f
+    global __fd__c_slots_core__ # all the attributes/methods that should not be redefined by the user
+    for key, value in tags.items():
+      if(key in __fd__c_slots_core__):
+        raise ValueError(f"ERROR: a Feature constructor keyworded parameter cannot be a reserved name (found '{key}')")
+      else:
+        setattr(self, key, value)
+    self.clean()
 
   @staticmethod
   def _manage_constructor_args__(*args, **kwargs):
-    # print(f"_manage_constructor_args__({args}, {kwargs})")
+    """This static method extracts from the constructor's inputs the different fields of the Feature
+Parameters:
+  `args` contains the optional name of the feature (of type str), its subtrees (of type _fd__c) and its cross-tree constraints (the rest)
+  `kwargs` contains the attributes (of type _fdattribute_c) and the tags of the feature (the rest)
+    """
     if(bool(args) and isinstance(args[0], str)):
       name = args[0]
       args = args[1:]
     else:
       name = None
-    attributes = tuple((key, spec) for key, spec in kwargs.items())
-    content = []
+    attributes = tuple( (key, spec,) for key, spec in kwargs.items() if(isinstance(spec, _fdattribute_c)) )
+    for key, _ in attributes: kwargs.pop(key)
+    children = []
     ctcs = []
     for el in args:
+      el = _fd__c._manage_parameter__(el)
       if(isinstance(el, _fd__c)):
-        content.append(el)
-      # elif(isinstance(el, _expbool__c)):
-        # ctcs.append(el)
+        children.append(el)
       else:
-        ctcs.append(_manage_parameter__(el))
-        # raise Exception(f"ERROR: unexpected FD subtree (found type \"{el.__class__.__name__}\")")
-    return name, content, ctcs, attributes
+        ctcs.append(el)
+    return name, children, ctcs, attributes, kwargs
+
+  @staticmethod
+  def _manage_parameter__(param):
+    """This static method implements a syntactic sugar for the parameters of a Feature constructor
+    """
+    if(isinstance(param, str)):    # if a parameter is a str, it can only be a leaf subtree
+      return FDAnd(param)
+    elif(isinstance(param, (bool, int, float, dict, set, frozenset))): # probably an erroneous input
+      raise ValueError(f"ERROR: a Feature constructor parameter must be a subtree or a cross-tree constraint (found '{type(param).__name__}')")
+    else:
+      return param
 
   ##########################################
   # base API
 
   @property
-  def name(self):
-    return self.m_name
-  @property
-  def children(self):
-    return self.m_content
-  @property
   def cross_tree_constraints(self):
-    return self.m_ctcs
-  @property
-  def attributes(self):
-    return self.m_attributes
+    """The cross-tree constraints of the feature"""
+    return self.ctcs
   def has_attributes(self):
+    """has_attributes() -> bool
+Returns if the feature has attributes
+    """
     return len(self.attributes) != 0
   def is_leaf(self):
+    """is_leaf() -> bool
+Returns if the feature is a leaf (i.e., has no sub-trees)
+    """
     return len(self.children) == 0
 
   ##########################################
   # generate_lookup API
 
   def clean(self):
+    """Remove automatically generated data"""
     self.m_lookup = None
     self.m_dom    = None
     self.m_errors = None
 
   def check(self):
+    """check() -> decl_errors__c
+Checks if the feature tree is well defined (i.e., all used features are defined and not ambiguous), and returns a possibly non-empty list of errors.
+    """
     return self.generate_lookup()
 
   def generate_lookup(self):
+    """
+    generate_lookup() -> decl_errors__c
+Computes the lookup mapping (i.e., the mapping partial path -> feature) for this feature tree, and returns the possibly non-empty list of declaration errors in this tree.
+    """
     if(self.m_lookup is None):
       self.m_errors = decl_errors__c()
       self.m_lookup = lookup__c()
@@ -265,7 +272,6 @@ class _fd__c(object):
 
   def link_constraint(self, c):
     self._check_lookup_("link a constraint")
-
     errors = decl_errors__c()
     c = _expbool__c._manage_parameter__(c)
     res = c.link(path__c(()), self.m_lookup, errors)
@@ -300,8 +306,12 @@ class _fd__c(object):
     return (configuration__c(res, self.m_lookup.resolve, names), errors)
 
   def _check_lookup_(self, op):
+    # 1. check if the lookup was computed
     if(self.m_lookup is None):
       raise ValueError(f"ERROR: an unchecked feature cannot {op} (detected feature \"{self}\").\nDid you forget to call \"check()\"?")
+    # 2. check if the FM is well-defined
+    if(bool(self.m_errors)):
+      raise ValueError(f"ERROR: an ill-defined feature cannot {op} (detected feature \"{self}\")")
 
   ##########################################
   # call API
@@ -318,9 +328,9 @@ class _fd__c(object):
   def _eval_generic__(self, conf, f_get, expected=True):
     expected_att = (_empty__ if(expected is False) else expected)
 
-    results_content = tuple(f_get(el, conf, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_content))
-    result_att = tuple(self._manage_attribute__(el, conf, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_attributes))
-    result_ctc = tuple(el(conf, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.m_ctcs))
+    results_content = tuple(f_get(el, conf, self._get_expected__(el, i, expected)) for i, el in enumerate(self.children))
+    result_att = tuple(self._manage_attribute__(el, conf, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.attributes))
+    result_ctc = tuple(el(conf, i, self._get_expected__(el, i, expected)) for i, el in enumerate(self.ctcs))
 
     nvalue_subs  = tuple(itertools.chain((el.m_nvalue for el in results_content), (el.m_value for el in itertools.chain(result_att, result_ctc))))
     nvalue_local = None
@@ -330,7 +340,7 @@ class _fd__c(object):
 
     # check consistency with name
     reason = None
-    if(self.m_name is not None):
+    if(self.name is not None):
       nvalue_local = conf.get(self, _empty__)
       if(nvalue_local is _empty__): # should never occur
         reason = reason_tree__c(self, 0)
@@ -358,7 +368,7 @@ class _fd__c(object):
     return _eval_result_fd__c(value, reason, nvalue_local, snodes)
 
   def _f_get_shallow__(self, conf, expected=True):
-    if(self.m_name is None):
+    if(self.name is None):
       return self._eval_generic__(conf, _fd__c._f_get_shallow__, expected)
     else:
       nvalue = conf.get(self, _empty__)
@@ -393,6 +403,14 @@ class _fd__c(object):
         reason = reason_tree__c(self, 0)
         reason.add_reason_value_mismatch(att, res, expected)
         return eval_result__c(res, reason)
+
+  def _compute__(self, values, nvalue):
+    raise NotImplementedError()
+  def _get_expected__(self, el, i, expected):
+    raise NotImplementedError()
+  def _infer_sv__(self, is_true_d):
+    raise NotImplementedError()
+
 
   ##########################################
   # DIMACS API
@@ -431,23 +449,23 @@ Currently, this method is only implemented for feature models without attributes
   # internal: lookup generation
 
   def _generate_lookup_rec__(self, path_to_self, idx, lookup, dom, errors):
-    # print(f"_generate_lookup_rec__([{self.__class__.__name__}]{self.m_name}, {idx}, {path_to_self}, {lookup}, {errors})")
+    # print(f"_generate_lookup_rec__([{self.__class__.__name__}]{self.name}, {idx}, {path_to_self}, {lookup}, {errors})")
     # 1. if local names, add it to the table, and check no duplicates
-    path_to_self.append(str(idx) if(self.m_name is None) else self.m_name)
+    path_to_self.append(str(idx) if(self.name is None) else self.name)
     local_path = path__c(path_to_self)
     lookup.insert(self, local_path, errors)
     dom[self] = local_path
     # 2. add subs
-    for i, sub in enumerate(self.m_content):
+    for i, sub in enumerate(self.children):
       sub._generate_lookup_rec__(path_to_self, i, lookup, dom, errors)
     # 3. add attributes
-    for att_def in self.m_attributes:
+    for att_def in self.attributes:
       att_path = local_path + att_def[0]
       lookup.insert(att_def, att_path, errors)
       # _fd__c._check_duplicate__(att_def, att_def[0], local_path, lookup, errors)
       dom[att_def] = att_path
     # 4. check ctcs
-    self.m_ctcs = tuple(ctc.link(local_path, lookup, errors) for ctc in self.m_ctcs)
+    self.ctcs = tuple(ctc.link(local_path, lookup, errors) for ctc in self.ctcs)
     # 5. reset path_to_self
     path_to_self.pop()
 
@@ -464,7 +482,7 @@ Currently, this method is only implemented for feature models without attributes
   def _close_configuration_1__(self, is_true_d):
     idx, v_local, v_subs = self._infer_sv__(is_true_d)
     self._make_product_update__(is_true_d, idx, v_local, v_subs)
-    for sub in self.m_content:
+    for sub in self.children:
       sub._close_configuration_1__(is_true_d)
     idx, v_local, v_subs = self._infer_sv__(is_true_d)
     self._make_product_update__(is_true_d, idx, v_local, v_subs)
@@ -472,21 +490,21 @@ Currently, this method is only implemented for feature models without attributes
   def _make_product_update__(self, is_true_d, idx, v_local, v_subs):
     if(v_local is not _empty__):
       is_true_d[self] = (v_local, idx)
-    for sub, v_sub in zip(self.m_content, v_subs):
+    for sub, v_sub in zip(self.children, v_subs):
       if(v_sub is not _empty__):
         is_true_d[sub] = (v_sub, idx)
 
   def _close_configuration_2__(self, v_local, is_true_d, res):
     _, _, v_subs = self._infer_sv__(is_true_d)
     res[self] = v_local
-    for sub, v_sub in zip(self.m_content, v_subs):
+    for sub, v_sub in zip(self.children, v_subs):
       if(v_sub is _empty__):
         sub._close_configuration_2__(False, is_true_d, res)
       else:
         sub._close_configuration_2__(v_sub, is_true_d, res)
     # if feature selected, need to include the attribute 
     if(v_local):
-      for att_def in self.m_attributes:
+      for att_def in self.attributes:
         v = is_true_d.get(att_def, _empty__)
         if(v is not _empty__):
           res[att_def] = v[0]
@@ -524,6 +542,12 @@ Currently, this method is only implemented for feature models without attributes
   def _updater__(self, ref):
     return self.m_dom.get(ref, ref)
 
+
+__fd__c_slots_core__ = frozenset(itertools.chain(
+  _fd__c.__slots_main__,
+  tuple(x[0] for x in inspect.getmembers(_fd__c, predicate=inspect.isfunction))
+))
+
 ##########################################
 # 2. FD groups
 
@@ -535,7 +559,7 @@ class FDAnd(_fd__c):
   def _get_expected__(self, el, i, expected):
     return (True if(expected) else None)
   def _infer_sv__(self, is_true_d):
-    idx, value = self._make_product_extract_utils__(is_true_d, itertools.chain((self,), self.m_content), expected=None)
+    idx, value = self._make_product_extract_utils__(is_true_d, itertools.chain((self,), self.children), expected=None)
     def get_default(el):
       val = is_true_d.get(el, _empty__)
       if((val is _empty__) or (val[1] < idx)):
@@ -543,7 +567,7 @@ class FDAnd(_fd__c):
       else:
         return val[0]
     v_local = get_default(self)
-    return idx, v_local, tuple(get_default(sub) for sub in self.m_content)
+    return idx, v_local, tuple(get_default(sub) for sub in self.children)
   def _to_dimacs_content_(self, vroot, it, dimacs_obj):
     for vsub in it:
       dimacs_obj.add_clause( (vroot, anot (vsub),) )
@@ -557,8 +581,8 @@ class FDAny(_fd__c):
   def _get_expected__(self, el, i, expected):
     return None
   def _infer_sv__(self, is_true_d):
-    # tuple((is_true_d.get(sub, (_empty__, -1))[0]) for sub in self.m_content)
-    idx_subs, v_subs = self._make_product_extract_utils__(is_true_d, self.m_content)
+    # tuple((is_true_d.get(sub, (_empty__, -1))[0]) for sub in self.children)
+    idx_subs, v_subs = self._make_product_extract_utils__(is_true_d, self.children)
     v_local, idx_local = is_true_d.get(self, (False, -1))
     if(idx_subs > idx_local):
       idx_local = idx_subs
@@ -576,8 +600,8 @@ class FDOr(_fd__c):
   def _get_expected__(self, el, i, expected):
     return (False if(not expected) else None)
   def _infer_sv__(self, is_true_d):
-    # tuple((is_true_d.get(sub, (_empty__, -1))[0]) for sub in self.m_content)
-    idx_subs, v_subs = self._make_product_extract_utils__(is_true_d, self.m_content)
+    # tuple((is_true_d.get(sub, (_empty__, -1))[0]) for sub in self.children)
+    idx_subs, v_subs = self._make_product_extract_utils__(is_true_d, self.children)
     v_local, idx_local = is_true_d.get(self, (False, -1))
     if(idx_subs > idx_local):
       idx_local = idx_subs
@@ -603,13 +627,13 @@ class FDXor(_fd__c):
   def _get_expected__(self, el, i, expected):
     return None
   def _infer_sv__(self, is_true_d):
-    idx_subs, v_subs = self._make_product_extract_utils__(is_true_d, self.m_content)
+    idx_subs, v_subs = self._make_product_extract_utils__(is_true_d, self.children)
     v_local, idx_local = is_true_d.get(self, (False, -1))
     if(idx_subs > idx_local):
       idx_local = idx_subs
       v_local = True
     if(idx_subs > -1):
-      v_subs = tuple((is_true_d.get(sub, (False, -1)) == (True, idx_subs)) for sub in self.m_content)
+      v_subs = tuple((is_true_d.get(sub, (False, -1)) == (True, idx_subs)) for sub in self.children)
     return idx_local, v_local, v_subs
   def _to_dimacs_content_(self, vroot, it, dimacs_obj):
     vsubs = list(it)

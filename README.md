@@ -10,14 +10,14 @@
 
 ### Installation
 
-This library is implemented in pure python and depends on [networkx](https://networkx.org/):
+This library is implemented in pure python and only depends on [networkx](https://networkx.org/):
  installing networkx using `pip` and cloning this repository is enough to install it:
 ```bash
 $ pip install networkx
 $ git clone https://github.com/onera/pydop.git
 ```
 Soon, this library will also:
- - be available on the `pypi` repository
+ - be available on the [pypi](https://pypi.org/) repository
  - alternatively, it will also contain a cmake file to install it in a specific location
 
 
@@ -39,15 +39,16 @@ In this Example, we have 5 imports:
 ```python
 from pydop.fm_constraint import *
 ```
-This line loads all the declaration to declare cross-tree constraints, i.e., boolean constraints over feature names.
+This line loads all the classes to declare cross-tree constraints, i.e., boolean constraints over feature names.
 ```python
 from pydop.fm_diagram import *
 ```
-This line loads all the class used to declare a feature model.
+This line loads all the classes used to declare a feature model.
 ```python
 from pydop.spl import SPL, RegistryGraph
 ```
-This line loads the `SPL` class and `RegistryGraph` which is a class that allows to specify the ordering between delta as a generic dependency graph.
+This line loads the `SPL` class and `RegistryGraph`.
+The later is a class that allows to specify the ordering between delta as a generic dependency graph.
 ```python
 from pydop.operations.modules import *
 ```
@@ -90,7 +91,7 @@ def gen_base_artifact():
 ```
 
 The factory is a python function with no parameter, that returns the initial artifact of a variant generation process.
-In our case, the initial variant is the `Greeter` class with the method `sayHello` that returns `"Hello World"`{:.python} said in english.
+In our case, the initial variant is the `Greeter` class with the method `sayHello` that returns `"Hello World"` said in english.
 
 #### Part 3: the SPL Object
 
@@ -104,8 +105,8 @@ The `SPL` constructor takes three parameters:
  - and the base artifact factory
 
 
-**Note:** it is possible in pydop to use a *Pure* Delta-Oriented Programming approach by putting `None`{:.python} in place of the base artifact factory.
-In that case, the parameter of the first delta being executed will be `None`{:.python}, and that delta would be in charge of providing the base artifact.
+**Note:** it is possible in pydop to use a *Pure* Delta-Oriented Programming approach [[2]](#2) by putting `None` in place of the base artifact factory.
+In that case, the parameter of the first delta being executed will be `None`, and this delta would be in charge of providing the base artifact.
 
 
 #### Part 4: the Deltas
@@ -126,15 +127,15 @@ def Rpt(Greeter, product):
   return " ".join(tmp_str for _ in range(product["times"]))
 ```
 
-Deltas are python function that modify the base artifact to construct the expected variant.
+Deltas are python functions that modify the base artifact to construct the expected variant.
 The first delta implements the `Dutch` feature.
 It is a function that takes one argument: the artifact to be modified.
-This delta modifies that artifact (in our case, the class `Greeter`) by replacing its `sayHello` method and making it return `"hello World`{:.python} in dutch.
+This delta modifies that artifact (in our case, the class `Greeter`) by replacing its `sayHello` method and making it return `"hello World` in dutch.
 The second delta implements the `German` feature and is implemented like the `Dutch` one.
 The third delta implements the `Repeat` feature and takes two parameters:
- the first one is the artifact to be modified (like for the two previous delta),
+ the first one is the artifact to be modified (like for the two previous deltas),
  and the second one is the product that triggered the variant generation.
-This delta uses this additional argument to retrieve the number of repetition requested by the user, with `product["times"]`{:.python} in the last line.
+This delta uses this additional argument to retrieve the number of repetition requested by the user, with `product["times"]` in the last line.
 
 #### Part 5: the Configuration Knowledge
 
@@ -148,7 +149,7 @@ This Configuration Knowledge (CK) simply states that
  the `Nl` delta is activated by the `Dutch` feature,
  the `De` delta is activated by the `German` feature,
  and the `Rpt` delta is activated by the `Repeat` feature.
-Moreover, the statement `after=["Nl", "De"]`{:.python} means that the `Nl` delta cannot be executed before the `Nl` or the `De` delta,
+Moreover, the statement `after=["Nl", "De"]` means that the `Nl` delta cannot be executed before the `Nl` or the `De` delta,
  to ensure that the repeated sentence is the correct one.
 
 
@@ -185,7 +186,7 @@ Greater = spl(conf)
 print(Greater().sayHello())
 ```
 
-Moreover, other variants can also ge created in the same python program, like this second one, with the `German` language selected and no repetition:
+Moreover, other variants can also be created in the same python program, like this second one, with the `German` language selected and no repetition:
 
 ```python
 conf, err = spl.close_configuration({"German": True, "Repeat": False})
@@ -196,10 +197,23 @@ Greater = spl(conf)
 print(Greater().sayHello())
 ```
 
+### Other Examples
+
+Other examples are available in the [examples](https://github.com/onera/pydop/tree/master/examples) folder.
+
+
 
 ## References
+
 <a name="1">[1]</a> 
 Dave Clarke, Radu Muschevici, José Proença, Ina Schaefer, and Rudolf Schlatte.
 2010. Variability Modelling in the ABS Language.
 In FMCO (LNCS, Vol. 6957). Springer, 204–224.
 *doi: 10.1007/978-3-642-25271-6_11*
+
+<a name="2">[2]</a>
+Ina Schaefer, and Ferruccio Damiani.
+2010. Pure delta-oriented programming.
+In FOSD'10. ACM, 49--56.
+*doi: 10.1145/1868688.1868696*
+
