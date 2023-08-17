@@ -30,6 +30,7 @@ import itertools
 from pydop.fm_result import decl_errors__c, reason_tree__c, eval_result__c
 from pydop.fm_configuration import configuration__c
 from pydop.utils import _empty__, lookup_wrapper__c
+from pydop.utils import anot
 
 ################################################################################
 # Boolean constraints
@@ -118,8 +119,9 @@ Evaluates the value of the boolean expression w.r.t. the product in parameter
   @property
   def vars(self):
     if(self.m_vars is None):
-      self.m_vars = set()
-      self._vars_update(self.m_vars)
+      res = set()
+      self._vars_update(res)
+      self.m_vars = res
     return self.m_vars
 
   def _vars_update(self, s):
@@ -128,6 +130,30 @@ Evaluates the value of the boolean expression w.r.t. the product in parameter
         el._vars_update(s)
     else:
       s.update(self.m_vars)
+
+  ## dimacs format utils
+  def add_to_dimacs(self, dimacs_obj):
+    """add_to_dimacs(utils.dimacs__c) -> int | bool
+Adds the translation of self into CNF to the object in parameter, and returns either:
+  the dimacs integer corresponding to self,
+  or True or False if the constraint is trivially True or False
+Raises NotImplementedError by default (the translation is not implemented for all constraints yet).
+    """
+    raise NotImplementedError()
+
+  def _to_dimacs_content_(self, dimacs_obj):
+    nb_false = 0
+    nb_true  = 0
+    content = []
+    for vsub in map((lambda sub: sub.add_to_dimacs(dimacs_obj)), self.m_content):
+      if(vsub is False):
+        nb_false += 1
+      elif(vsub is True):
+        nb_true += 1
+      else:
+        content.append(vsub)
+    return nb_false, nb_true, content
+
 
 
 ##########################################
@@ -159,6 +185,9 @@ The parameter is the id of the variable
 
   def _vars_update(self, s):
     s.add(self.m_content)
+
+  def add_to_dimacs(self, dimacs_obj):
+    return dimacs_obj.get(self.m_content)
 
 
 class Lit(_expbool__c):
@@ -241,6 +270,24 @@ class And(_expbool__c):
   def _get_expected__(self, el, idx, expected):
     if(expected is True): return True
     else: return None
+  def add_to_dimacs(self, dimacs_obj):
+    nb_false, nb_true, content_list = self._to_dimacs_content_(dimacs_obj)
+    if(nb_false != 0): return False
+    return self._add_to_dimacs_content_(self, content_list, dimacs_obj)
+
+  @staticmethod
+  def _add_to_dimacs_content_(obj, content_list, dimacs_obj):
+    if(len(content_list) == 0):
+      return True
+    elif(len(content_list) == 1):
+      return content_list[0]
+    else:
+      vroot = dimacs_obj.get(obj)
+      for vsub in content_list:
+        dimacs_obj.add_clause( (anot (vroot), vsub,) ) # vroot => vsub
+      nclause = tuple(itertools.chain((anot (vsub) for vsub in content_list), (vroot,))) # not vroot => 1 vsub must be false
+      dimacs_obj.add_clause( nclause )
+      return vroot
 
 class Or(_expbool__c):
   """Class for the logical disjunction of booleans"""
@@ -252,6 +299,20 @@ class Or(_expbool__c):
   def _get_expected__(self, el, idx, expected):
     if(expected is not False): return None
     else: return False
+  def add_to_dimacs(self, dimacs_obj):
+    nb_false, nb_true, content_list = self._to_dimacs_content_(dimacs_obj)
+    if(nb_true != 0): return True
+    if(len(content_list) == 0):
+      return False
+    elif(len(content_list) == 1):
+      return content_list[0]
+    else:
+      vroot = dimacs_obj.get(self)
+      for vsub in content_list:
+        dimacs_obj.add_clause( (vroot, anot (vsub),) ) # vsub => vroot
+      content_list.append(anot (vroot))  # vroot => 1 vsub must be true
+      dimacs_obj.add_clause( content_list )
+      return vroot
 
 class Not(_expbool__c):
   """Class for the logical negation of a boolean"""
@@ -264,6 +325,9 @@ class Not(_expbool__c):
     if(expected is True): return False
     elif(expected is False): return True
     else: return None
+  def add_to_dimacs(self, dimacs_obj):
+    res = self.m_content[0].add_to_dimacs(dimacs_obj)
+    return anot (res)
 
 class Xor(_expbool__c):
   """Class for the logical alternative of booleans"""
@@ -279,6 +343,26 @@ class Xor(_expbool__c):
     return res
   def _get_expected__(self, el, idx, expected):
     return None
+  def add_to_dimacs(self, dimacs_obj):
+    nb_false, nb_true, content_list = self._to_dimacs_content_(dimacs_obj)
+    if(nb_true == 0):
+      if(len(content_list) == 0):
+        return False
+      elif(len(content_list) == 1):
+        return content_list[0]
+      else:
+        vroot = dimacs_obj.get(self)
+        for i, vsub in enumerate(content_list):
+          dimacs_obj.add_clause( (vroot, anot (vsub),) ) # vsub => vroot
+          for j in range(i):
+            dimacs_obj.add_clause( (anot (content_list[j]), anot (vsub),) ) # incompatibility between subs
+        content_list.append(anot (vroot))  # vroot => 1 vsub must be true
+        dimacs_obj.add_clause( content_list )
+        return vroot
+    elif(nb_true == 1): # all content_list must be false
+      return And._add_to_dimacs_content_(self, list(anot (vsub) for vsub in content_list), dimacs_obj)
+    elif(nb_true > 1):
+      return False
 
 class Conflict(_expbool__c):
   """Class for the logical NAND gate over multiple booleans"""
@@ -294,6 +378,22 @@ class Conflict(_expbool__c):
     return True
   def _get_expected__(self, el, idx, expected):
     return None
+  def add_to_dimacs(self, dimacs_obj):
+    nb_false, nb_true, content_list = self._to_dimacs_content_(dimacs_obj)
+    if(nb_true == 0):
+      if(len(content_list) <= 1):
+        return True
+      else:
+        vroot = dimacs_obj.get(self)
+        for i, vsub in enumerate(content_list):
+          dimacs_obj.add_clause( (vroot, anot (vsub),) ) # vsub => vroot
+          for j in range(i):
+            dimacs_obj.add_clause( (anot (content_list[j]), anot (vsub),) ) # incompatibility between subs
+        return vroot
+    elif(nb_true == 1): # all content_list must be false
+      return And._add_to_dimacs_content_(self, list(anot (vsub) for vsub in content_list), dimacs_obj)
+    elif(nb_true > 1):
+      return False
 
 class Implies(_expbool__c):
   """Class for the logical implication of booleans"""
@@ -304,6 +404,18 @@ class Implies(_expbool__c):
     return ((not values[0]) or values[1])
   def _get_expected__(self, el, idx, expected):
     return None
+  def add_to_dimacs(self, dimacs_obj):
+    vleft  = self.m_content[0].add_to_dimacs(dimacs_obj)
+    vright = self.m_content[1].add_to_dimacs(dimacs_obj)
+    if(vleft is False): return True
+    elif(vleft is True): return vright
+    elif(vright is False): return anot (vleft)
+    elif(vright is True): return True
+    else:
+      vroot = dimacs_obj.get(self)
+      dimacs_obj.add_clause( (anot (vroot), anot (vleft), vright,) ) # vroot => (vleft => vright)
+      dimacs_obj.add_clause( (vroot, vleft, anot (vright),) ) # (vleft => vright) => vroot
+      return vroot
 
 class Iff(_expbool__c):
   """Class for the logical equivalence of booleans (identical to Eq)"""
@@ -314,4 +426,18 @@ class Iff(_expbool__c):
     return (values[0] == values[1])
   def _get_expected__(self, el, idx, expected):
     return None
+  def add_to_dimacs(self, dimacs_obj):
+    vleft  = self.m_content[0].add_to_dimacs(dimacs_obj)
+    vright = self.m_content[1].add_to_dimacs(dimacs_obj)
+    if(vleft is False): return anot (vright)
+    elif(vleft is True): return vright
+    elif(vright is False): return anot (vleft)
+    elif(vright is True): return vleft
+    else:
+      vroot = dimacs_obj.get(self)
+      dimacs_obj.add_clause( (anot (vroot), anot (vleft), vright,) ) # vroot => (vleft => vright)
+      dimacs_obj.add_clause( (anot (vroot), vleft, anot (vright),) ) # vroot => (vright => vleft)
+      dimacs_obj.add_clause( (vroot, vleft, anot (vright),) ) # (vleft => vright) => vroot
+      dimacs_obj.add_clause( (vroot, anot (vleft), vright,) ) # (vright => vleft) => vroot
+      return vroot
 

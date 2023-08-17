@@ -29,6 +29,7 @@ from pydop.fm_constraint import _expbool__c, Var, Lit
 from pydop.fm_configuration import configuration__c
 
 from pydop.utils import _empty__, path__c, lookup__c, domain__c
+from pydop.utils import dimacs__c, anot
 
 
 def _manage_parameter__(param):
@@ -394,6 +395,39 @@ class _fd__c(object):
         return eval_result__c(res, reason)
 
   ##########################################
+  # DIMACS API
+
+  def to_dimacs(self, dimacs_obj=None, dom=None):
+    """to_dimacs() -> utils.dimacs__c
+Translates the feature model in a CNF problem in the dimacs format.
+Currently, this method is only implemented for feature models without attributes (otherwise, NotImplementedError is raised).
+    """
+    assert ((dimacs_obj == None) == (dom == None))
+    if(dimacs_obj is None): # is_root
+      dom = self.m_dom
+      self._check_lookup_("be translated to dimacs format") 
+      dimacs_obj = dimacs__c()
+      vroot = dimacs_obj.get(self)
+      dimacs_obj.add_comment(f"root feature {dom[self]} => {dimacs_obj.get(self)}")
+      dimacs_obj.add_clause( (vroot,) ) # the root must be true
+    else:
+      dimacs_obj.add_comment(f"feature {dom[self]} => {dimacs_obj.get(self)}")
+    # manages content, cross-tree-constraints and attributes
+    it = itertools.chain(
+      map((lambda sub: dimacs_obj.get(sub)), self.m_content),
+      map((lambda ctc: ctc.add_to_dimacs(dimacs_obj)), self.m_ctcs)
+    )
+    if(self.m_attributes):
+      raise NotImplementedError()
+    self._to_dimacs_content_(dimacs_obj.get(self), it, dimacs_obj)
+    # iterate over content
+    for sub in self.m_content:
+      sub.to_dimacs(dimacs_obj, dom)
+
+    return dimacs_obj
+
+
+  ##########################################
   # internal: lookup generation
 
   def _generate_lookup_rec__(self, path_to_self, idx, lookup, dom, errors):
@@ -401,10 +435,8 @@ class _fd__c(object):
     # 1. if local names, add it to the table, and check no duplicates
     path_to_self.append(str(idx) if(self.m_name is None) else self.m_name)
     local_path = path__c(path_to_self)
-    if(self.m_name is not None):
-      lookup.insert(self, local_path, errors)
-      # _fd__c._check_duplicate__(self, self.m_name, local_path, lookup, errors)
-      dom[self] = local_path
+    lookup.insert(self, local_path, errors)
+    dom[self] = local_path
     # 2. add subs
     for i, sub in enumerate(self.m_content):
       sub._generate_lookup_rec__(path_to_self, i, lookup, dom, errors)
@@ -512,6 +544,10 @@ class FDAnd(_fd__c):
         return val[0]
     v_local = get_default(self)
     return idx, v_local, tuple(get_default(sub) for sub in self.m_content)
+  def _to_dimacs_content_(self, vroot, it, dimacs_obj):
+    for vsub in it:
+      dimacs_obj.add_clause( (vroot, anot (vsub),) )
+      dimacs_obj.add_clause( (anot (vroot), vsub,) )
 
 class FDAny(_fd__c):
   def __init__(self, *args, **kwargs):
@@ -528,6 +564,9 @@ class FDAny(_fd__c):
       idx_local = idx_subs
       v_local = True
     return idx_local, v_local, v_subs
+  def _to_dimacs_content_(self, vroot, it, dimacs_obj):
+    for vsub in it:
+      dimacs_obj.add_clause( (vroot, anot (vsub),) )
 
 class FDOr(_fd__c):
   def __init__(self, *args, **kwargs):
@@ -544,6 +583,12 @@ class FDOr(_fd__c):
       idx_local = idx_subs
       v_local = True
     return idx_local, v_local, v_subs
+  def _to_dimacs_content_(self, vroot, it, dimacs_obj):
+    vsubs = list(it)
+    for vsub in vsubs:
+      dimacs_obj.add_clause( (vroot, anot (vsub),) )
+    vsubs.append(anot (vroot))
+    dimacs_obj.add_clause( vsubs )
 
 class FDXor(_fd__c):
   def __init__(self, *args, **kwargs):
@@ -566,6 +611,14 @@ class FDXor(_fd__c):
     if(idx_subs > -1):
       v_subs = tuple((is_true_d.get(sub, (False, -1)) == (True, idx_subs)) for sub in self.m_content)
     return idx_local, v_local, v_subs
+  def _to_dimacs_content_(self, vroot, it, dimacs_obj):
+    vsubs = list(it)
+    for i, vsub in enumerate(vsubs):
+      dimacs_obj.add_clause( (vroot, anot (vsub),) )
+      for j in range(i):
+        dimacs_obj.add_clause( (anot (vsubs[j]), anot (vsub),) )
+    vsubs.append(anot (vroot))
+    dimacs_obj.add_clause( vsubs )
 
 ##########################################
 # 3. FD aliases

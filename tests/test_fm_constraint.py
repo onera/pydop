@@ -20,6 +20,7 @@
 # email: michael.lienhardt@onera.fr
 
 from pydop.fm_constraint import *
+from pydop.utils import dimacs__c
 
 
 def test_constraint():
@@ -109,6 +110,38 @@ def test_constraint():
     #   print(f" reason: {res.m_reason}")
 
 
+def test_constraint_dimacs():
+  print("==========================================")
+  print("= test_constraint_dimacs")
+
+  val_1 = "val_1"
+  val_2 = "val_2"
+  val_3 = "val_3"
+
+  c_01 = And(val_1, val_2, val_3)
+  c_02 = Or(val_1, val_2, val_3)
+  c_03 = Xor(val_1, val_2, val_3)
+  c_04 = Conflict(val_1, val_2, val_3)
+  c_05 = Implies(val_1, val_2)
+  c_06 = Iff(val_1, val_2)
+
+  # for i, c in enumerate( (c_01, c_02, c_03, c_04, c_05, c_06,) ):
+  # # for i, c in enumerate( (c_01,) ):
+  #   print("====================")
+  #   print("=", i)
+  #   dimacs_obj = dimacs_cls()
+  #   c.add_to_dimacs(dimacs_obj)
+  #   print("==", c.vars)
+  #   print(dimacs_obj.to_string(c.vars))
+
+  c = And(c_02, c_05)
+  dimacs_obj = dimacs__c()
+  c.add_to_dimacs(dimacs_obj)
+  print(dimacs_obj.to_string(c.vars))
+
+
+
 
 if(__name__ == "__main__"):
   test_constraint()
+  # test_constraint_dimacs()

@@ -93,7 +93,7 @@ class path__c(tuple):
 
 class lookup__c(object):
   """Class for variable lookup"""
-  __slots__ = ("m_content")
+  __slots__ = ("m_content",)
   def __init__(self):
     self.m_content = {}
 
@@ -138,11 +138,6 @@ If the path corresponds to multiple objects, adds an abiguous error to `errors` 
       else:
         return refs[0][0]
     return default
-
-  # def get_with_path(self, path, suffix, errors, default=None):
-  #   path = path + _path_from_str__(suffix)
-  #   return self.get(path, errors, default)
-
 
   def resolve(self, key, location, errors, default=None):
     """resolve(object, object, errors) -> object
@@ -299,6 +294,123 @@ class domain__c(tuple):
     else:
       return "]-inf, inf["
 
+
+
+################################################################################
+# for CNF DIMACS translation
+################################################################################
+
+def anot(value):
+  """
+  Util function that implements the negation of a boolean value or a dimacs atom (i.e., integer)
+  """
+  if(value is True): return False
+  elif(value is False): return True
+  else:
+    assert (isinstance(value, int))
+    return - value
+
+class dimacs__c(object):
+  """Represents a dimacs-encoded SAT problem.
+Includes a registry for automatic conversion from variable name to dimacs representation (i.e., integers)
+  """
+  __slots__ = ("m_vreg", "m_clauses", "m_counter", "has_true_clause", "has_false_clause", "m_nb_clause",)
+  def __init__(self):
+    self.m_vreg = {}
+    self.m_clauses = []
+    self.m_counter = 1
+    self.has_true_clause = False
+    self.has_false_clause = False
+    self.m_nb_clause = 0
+
+  def get(self, v):
+    """"get(object) -> integer
+Returns the id of the variable name in parameter
+    """
+    res = self.m_vreg.get(v)
+    if(res is None):
+      res = self.m_counter
+      self.m_counter += 1
+      self.m_vreg[v] = res
+    return res
+
+  def add_clause(self, clause):
+    """add_clause(tuple[int | bool]) -> NoneType
+add_clause(list[int] | bool) -> NoneType
+Adds a clause to the CNF problem
+    """
+    # 1. ensure clause consistency
+    assert (isinstance(clause, (tuple, list)))
+    clause = tuple(map(self._add_clause_el_, clause))
+    # 2. register clause
+    self.m_clauses.append(clause)
+    self.m_nb_clause += 1
+
+  def _add_clause_el_(self, el):
+    if(el is True):
+      self.has_true_clause = True
+      return self.get(el)
+    elif(el is False):
+      self.has_false_clause = True
+      return self.get(el)
+    else:
+      assert (isinstance(el, int) and (-self.m_counter < el) and (el < self.m_counter))
+      return el
+
+  def add_comment(self, comment):
+    """add_comment(str) -> NoneType
+Adds a comment to the clause list (useful for documenting the generated CNF file)
+    """
+    assert (isinstance(comment, str))
+    self.m_clauses.append(comment)
+
+  def get_mapping(self):
+    """get_mapping() -> dict[object, int]
+Returns the dict mapping every variable to its dimacs integer
+    """
+    return self.m_vreg
+  def get_clauses(self):
+    """get_clauses() -> list[tuple[int]]
+Returns the list of clause of this CNF problem
+    """
+    return self.m_clauses
+
+  def to_string(self, dom=None):
+    """to_string() -> str
+to_string(iterable[object]) -> str
+to_string(iterable[pair[object, str]]) -> str
+Returns the textual representation of this CNF problem, using the dimacs format.
+The optional parameter is used to identify which variable must be documented in the header of the file,
+ i.e., for each variable object `v` in `dom`, a comment is added at the start of the file of the form
+```c id variable_name```
+where `id` is the dimacs integer corresponding to `v`, and `variable_name` is either `v` or the string associated to `v` in `dom`
+    """
+    if(dom is None):
+      dom = ()
+    res = ""
+    # 1. print variable name
+    for el in dom:
+      if(isinstance(el, (tuple, list)) and (len(el) == 2)):
+        key, name = el
+      else:
+        key = el
+        name = el
+      res += f"c {self.m_vreg[key]} {name}\n"
+    nb_clause = self.m_nb_clause
+    if(self.has_true_clause): nb_clause += 1
+    if(self.has_false_clause): nb_clause += 1
+    res += f"p cnf {self.m_counter - 1} {nb_clause}\n"
+    for c in self.m_clauses:
+      if(isinstance(c, str)):
+        res += f"c {c}\n"
+      else:
+        res += f"{' '.join(map(str, c))} 0\n"
+    if(self.has_true_clause): res += f"{self.get(True)} 0\n"
+    if(self.has_false_clause): res += f"{-self.get(False)} 0\n"
+    return res
+
+  def __str__(self):
+    return self.to_string()
 
 
 ################################################################################

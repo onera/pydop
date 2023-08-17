@@ -52,7 +52,7 @@ def spl_definition():
   def base_artifact_factory():
    res = Module("HW")
    @add(res)
-   class Greater(object):
+   class Greeter(object):
      def sayHello(self): return "Hello World"
    return res
 
@@ -60,18 +60,18 @@ def spl_definition():
 
 
   def Nl(module):
-   @modify(module.Greater)
+   @modify(module.Greeter)
    def sayHello(self): return "Hallo wereld"
 
+  def De(module):
+   @modify(module.Greeter)
+   def sayHello(self): return "Hallo Welt"
+
   def Rpt(module, product):
-   @modify(module.Greater)
+   @modify(module.Greeter)
    def sayHello(self):
     tmp_str = self.original()
     return " ".join(tmp_str for _ in range(product["times"]))
-
-  def De(module):
-   @modify(module.Greater)
-   def sayHello(self): return "Hallo Welt"
 
 
   spl.delta("Dutch")(Nl)
@@ -97,5 +97,5 @@ if(__name__ == '__main__'):
     print(err); sys.exit(-1)
 
   HW = spl(conf)
-  print(HW.Greater().sayHello())
+  print(HW.Greeter().sayHello())
 
