@@ -432,14 +432,14 @@ Currently, this method is only implemented for feature models without attributes
       dimacs_obj.add_comment(f"feature {dom[self]} => {dimacs_obj.get(self)}")
     # manages content, cross-tree-constraints and attributes
     it = itertools.chain(
-      map((lambda sub: dimacs_obj.get(sub)), self.m_content),
-      map((lambda ctc: ctc.add_to_dimacs(dimacs_obj)), self.m_ctcs)
+      map((lambda sub: dimacs_obj.get(sub)), self.children),
+      map((lambda ctc: ctc.add_to_dimacs(dimacs_obj)), self.ctcs)
     )
-    if(self.m_attributes):
+    if(self.attributes):
       raise NotImplementedError()
     self._to_dimacs_content_(dimacs_obj.get(self), it, dimacs_obj)
     # iterate over content
-    for sub in self.m_content:
+    for sub in self.children:
       sub.to_dimacs(dimacs_obj, dom)
 
     return dimacs_obj
