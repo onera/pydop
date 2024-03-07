@@ -10,16 +10,18 @@
 
 ### Installation
 
-This library is implemented in pure python and only depends on [networkx](https://networkx.org/):
+This library is available using the `pip` command:
+```bash
+$ pip install pydop
+```
+
+Alternatively, it is possible to simply clone this repository:
+ this library is implemented in pure python and only depends on [networkx](https://networkx.org/):
  installing networkx using `pip` and cloning this repository is enough to install it:
 ```bash
 $ pip install networkx
 $ git clone https://github.com/onera/pydop.git
 ```
-Soon, this library will also:
- - be available on the [pypi](https://pypi.org/) repository
- - alternatively, it will also contain a cmake file to install it in a specific location
-
 
 ### An Hello World Example
 

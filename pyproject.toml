@@ -1,0 +1,67 @@
+[build-system]
+build-backend = 'setuptools.build_meta'
+requires = ['setuptools>=61.0']
+
+[project]
+name = 'pydop'
+description = 'Python package for the creation of delta-oriented Software Product Lines.'
+readme = 'README.md'
+requires-python = '>=3.8'
+dynamic = ['version']
+keywords = [
+  'Software Product Lines',
+  'Multi-Software Product Lines',
+  'Delta-Oriented Programming',
+  'Variability',
+  'Software Engineering',
+]
+classifiers = [
+    'Development Status :: 4 - Beta',
+    'Intended Audience :: Developers',
+    'Intended Audience :: Science/Research',
+    'License :: OSI Approved :: GNU Lesser General Public License v3 (LGPLv3)',
+    'Operating System :: OS Independent',
+    'Programming Language :: Python :: 3',
+    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+    'Programming Language :: Python :: 3 :: Only',
+    'Topic :: Software Development :: Libraries :: Python Modules',
+    'Topic :: Software Development :: Code Generators',
+
+]
+dependencies = ['networkx>=3.0']
+
+[[project.authors]]
+name = 'Michael Lienhardt'
+email = 'michael.lienhardt@onera.fr'
+
+
+[project.urls]
+Homepage = 'https://github.com/onera/pydop'
+"Bug Tracker" = 'https://github.com/onera/pydop/issues'
+Documentation = 'https://github.com/onera/pydop'
+"Source Code" = 'https://github.com/onera/pydop'
+
+[project.entry-points."networkx.backends"]
+nx-loopback = 'networkx.classes.tests.dispatch_interface:dispatcher'
+
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = false
+packages = [
+    'pydop',
+    'pydop.operations',
+]
+platforms = [
+    'Linux',
+    'Mac OSX',
+    'Windows',
+    'Unix',
+]
+
+[tool.setuptools.dynamic.version]
+attr = 'pydop.__version__'
+
